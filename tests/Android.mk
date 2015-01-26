@@ -14,8 +14,6 @@
 # limitations under the License.
 #
 
-ifneq ($(BUILD_TINY_ANDROID),true)
-
 LOCAL_PATH := $(call my-dir)
 
 # -----------------------------------------------------------------------------
@@ -212,19 +210,36 @@ build_type := host
 include $(LOCAL_PATH)/Android.build.mk
 
 # -----------------------------------------------------------------------------
+# Library of bionic customized gtest main function.
+# -----------------------------------------------------------------------------
+libBionicGtestMain_src_files := gtest_main.cpp
+
+libBionicGtestMain_cflags := $(test_cflags)
+
+libBionicGtestMain_cppflags := $(test_cppflags)
+
+module := libBionicGtestMain
+module_tag := optional
+build_type := target
+build_target := STATIC_TEST_LIBRARY
+include $(LOCAL_PATH)/Android.build.mk
+build_type := host
+include $(LOCAL_PATH)/Android.build.mk
+
+# -----------------------------------------------------------------------------
 # Tests for the device using bionic's .so. Run with:
 #   adb shell /data/nativetest/bionic-unit-tests/bionic-unit-tests32
 #   adb shell /data/nativetest/bionic-unit-tests/bionic-unit-tests64
 # -----------------------------------------------------------------------------
 bionic-unit-tests_whole_static_libraries := \
     libBionicTests \
+    libBionicGtestMain \
 
 bionic-unit-tests_static_libraries := \
     libtinyxml2 \
     liblog \
 
 bionic-unit-tests_src_files := \
-    gtest_main.cpp \
     atexit_test.cpp \
     dl_test.cpp \
     dlext_test.cpp \
@@ -268,6 +283,7 @@ include $(LOCAL_PATH)/Android.build.mk
 # -----------------------------------------------------------------------------
 bionic-unit-tests-static_whole_static_libraries := \
     libBionicTests \
+    libBionicGtestMain \
 
 bionic-unit-tests-static_static_libraries := \
     libm \
@@ -276,9 +292,6 @@ bionic-unit-tests-static_static_libraries := \
     libdl \
     libtinyxml2 \
     liblog \
-
-bionic-unit-tests-static_src_files := \
-    gtest_main.cpp \
 
 bionic-unit-tests-static_force_static_executable := true
 
@@ -302,7 +315,6 @@ include $(LOCAL_PATH)/Android.build.mk
 ifeq ($(HOST_OS)-$(HOST_ARCH),$(filter $(HOST_OS)-$(HOST_ARCH),linux-x86 linux-x86_64))
 
 bionic-unit-tests-glibc_src_files := \
-    gtest_main.cpp \
     atexit_test.cpp \
     dlfcn_test.cpp \
     dl_test.cpp \
@@ -315,6 +327,7 @@ bionic-unit-tests-glibc_shared_libraries += libdl_test_df_1_global
 
 bionic-unit-tests-glibc_whole_static_libraries := \
     libBionicStandardTests \
+    libBionicGtestMain \
 
 bionic-unit-tests-glibc_ldlibs := \
     -lrt -ldl -lutil \
@@ -354,7 +367,7 @@ LOCAL_CXX = $(LOCAL_PATH)/file-check-cxx \
 
 LOCAL_CLANG := false
 LOCAL_MODULE := bionic-compile-time-tests-g++
-LOCAL_CXXFLAGS := -Wall
+LOCAL_CPPFLAGS := -Wall
 LOCAL_SRC_FILES := fortify_sprintf_warnings.cpp
 include $(BUILD_STATIC_LIBRARY)
 
@@ -371,7 +384,7 @@ LOCAL_CXX := $(LOCAL_PATH)/file-check-cxx \
 
 LOCAL_CLANG := true
 LOCAL_MODULE := bionic-compile-time-tests-clang++
-LOCAL_CXXFLAGS := -Wall
+LOCAL_CPPFLAGS := -Wall
 # FileCheck will error if there aren't any CLANG: lines in the file, but there
 # don't appear to be any cases where clang _does_ emit warnings for sn?printf :(
 LOCAL_SRC_FILES :=
@@ -398,11 +411,15 @@ bionic-unit-tests-glibc-run: bionic-unit-tests-glibc
 include $(LOCAL_PATH)/../build/run-on-host.mk
 
 ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),x86 x86_64))
+
+TEST_TIMEOUT := 0
+
 # BIONIC_TEST_FLAGS is either empty or it comes from the user.
 bionic-unit-tests-run-on-host32: bionic-unit-tests bionic-prepare-run-on-host
 	ANDROID_DATA=$(TARGET_OUT_DATA) \
 	ANDROID_DNS_MODE=local \
 	ANDROID_ROOT=$(TARGET_OUT) \
+		timeout $(TEST_TIMEOUT) \
 		$(TARGET_OUT_DATA)/nativetest/bionic-unit-tests/bionic-unit-tests32 $(BIONIC_TEST_FLAGS)
 
 ifeq ($(TARGET_IS_64_BIT),true)
@@ -411,6 +428,7 @@ bionic-unit-tests-run-on-host64: bionic-unit-tests bionic-prepare-run-on-host
 	ANDROID_DATA=$(TARGET_OUT_DATA) \
 	ANDROID_DNS_MODE=local \
 	ANDROID_ROOT=$(TARGET_OUT) \
+		timeout $(TEST_TIMEOUT) \
 		$(TARGET_OUT_DATA)/nativetest64/bionic-unit-tests/bionic-unit-tests64 $(BIONIC_TEST_FLAGS)
 endif
 
@@ -418,4 +436,3 @@ endif # x86 x86_64
 endif # linux-x86
 
 include $(call first-makefiles-under,$(LOCAL_PATH))
-endif # !BUILD_TINY_ANDROID

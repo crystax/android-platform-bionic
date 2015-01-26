@@ -61,6 +61,7 @@ libc_common_src_files := \
     stdio/fread.c \
     stdio/snprintf.c\
     stdio/sprintf.c \
+    stdio/stdio.c \
     stdio/stdio_ext.cpp \
 
 # Fortify implementations of libc functions.
@@ -450,7 +451,6 @@ libc_upstream_openbsd_src_files := \
     upstream-openbsd/lib/libc/stdio/setbuffer.c \
     upstream-openbsd/lib/libc/stdio/setvbuf.c \
     upstream-openbsd/lib/libc/stdio/sscanf.c \
-    upstream-openbsd/lib/libc/stdio/stdio.c \
     upstream-openbsd/lib/libc/stdio/swprintf.c \
     upstream-openbsd/lib/libc/stdio/swscanf.c \
     upstream-openbsd/lib/libc/stdio/tempnam.c \
@@ -862,7 +862,7 @@ LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
 LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
-LOCAL_CPPFLAGS := $(libc_common_cppflags)
+LOCAL_CPPFLAGS := $(libc_common_cppflags) -Wold-style-cast
 LOCAL_C_INCLUDES := $(libc_common_c_includes) bionic/libstdc++/include
 LOCAL_MODULE := libc_bionic
 LOCAL_CLANG := $(use_clang)
@@ -896,7 +896,14 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
 LOCAL_CXX_STL := none
 LOCAL_SYSTEM_SHARED_LIBRARIES :=
 LOCAL_ADDRESS_SANITIZER := false
-LOCAL_NATIVE_COVERAGE := $(bionic_coverage)
+# b/17574078: Need to disable coverage until we have a prebuilt libprofile_rt.
+# Since this is a static library built with clang, it needs to link
+# libprofile_rt when it is linked into the final binary. Since the final binary
+# is built with GCC, it won't link libprofile_rt. We can't very easily just add
+# libprofile_rt to all link lines the way we've done for libgcov because
+# libprofile_rt isn't prebuilt, and it would be tricky to write a rule that
+# would make sure libprofile_rt is built.
+LOCAL_NATIVE_COVERAGE := false
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -940,6 +947,26 @@ LOCAL_CXX_STL := none
 LOCAL_SYSTEM_SHARED_LIBRARIES :=
 LOCAL_ADDRESS_SANITIZER := false
 LOCAL_NATIVE_COVERAGE := $(bionic_coverage)
+
+include $(BUILD_STATIC_LIBRARY)
+
+# ========================================================
+# libc_ndk.a
+# Compatibility library for the NDK. This library contains
+# all the parts of libc that are safe to statically link.
+# We can't safely statically link things that can only run
+# on a certain version of the OS. Examples include
+# anything that talks to netd (a large portion of the DNS
+# code) and anything that is dependent on the layout of a
+# data structure that has changed across releases (such as
+# pthread_t).
+# ========================================================
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := libc_ndk
+LOCAL_WHOLE_STATIC_LIBRARIES := libc_syscalls libm
+LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
 
 include $(BUILD_STATIC_LIBRARY)
 
