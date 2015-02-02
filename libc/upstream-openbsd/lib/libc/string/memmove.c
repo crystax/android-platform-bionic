@@ -1,4 +1,4 @@
-/*	$OpenBSD: bcopy.c,v 1.5 2005/08/08 08:05:37 espie Exp $ */
+/*	$OpenBSD: memmove.c,v 1.1 2014/11/30 19:43:56 deraadt Exp $ */
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -44,21 +44,9 @@ typedef	long word;		/* "word" used for optimal copy speed */
 
 /*
  * Copy a block of memory, handling overlap.
- * This is the routine that actually implements
- * (the portable versions of) bcopy, memcpy, and memmove.
  */
-#ifdef MEMCOPY
-void *
-memcpy(void *dst0, const void *src0, size_t length)
-#else
-#ifdef MEMMOVE
 void *
 memmove(void *dst0, const void *src0, size_t length)
-#else
-void
-bcopy(const void *src0, void *dst0, size_t length)
-#endif
-#endif
 {
 	char *dst = dst0;
 	const char *src = src0;
@@ -120,9 +108,5 @@ bcopy(const void *src0, void *dst0, size_t length)
 		TLOOP(*--dst = *--src);
 	}
 done:
-#if defined(MEMCOPY) || defined(MEMMOVE)
 	return (dst0);
-#else
-	return;
-#endif
 }

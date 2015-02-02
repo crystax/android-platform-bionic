@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,13 +26,39 @@
  * SUCH DAMAGE.
  */
 
-#undef _FORTIFY_SOURCE
-#include <string.h>
-#include <strings.h>
+#ifndef _ANDROID_LEGACY_STDLIB_INLINES_H_
+#define _ANDROID_LEGACY_STDLIB_INLINES_H_
 
-// Our unoptimized memcpy just calls the best bcopy available.
-// (It's this way round rather than the opposite because we're based on BSD source.)
-void* memcpy(void* dst, const void* src, size_t n) {
-  bcopy(src, dst, n);
-  return dst;
+#include <sys/cdefs.h>
+
+__BEGIN_DECLS
+
+static __inline float strtof(const char *nptr, char **endptr) {
+  return (float)strtod(nptr, endptr);
 }
+
+static __inline double atof(const char *nptr) { return (strtod(nptr, NULL)); }
+
+static __inline int abs(int __n) { return (__n < 0) ? -__n : __n; }
+
+static __inline long labs(long __n) { return (__n < 0L) ? -__n : __n; }
+
+static __inline long long llabs(long long __n) {
+  return (__n < 0LL) ? -__n : __n;
+}
+
+static __inline int rand(void) { return (int)lrand48(); }
+
+static __inline void srand(unsigned int __s) { srand48(__s); }
+
+static __inline long random(void) { return lrand48(); }
+
+static __inline void srandom(unsigned int __s) { srand48(__s); }
+
+static __inline int grantpt(int __fd __attribute((unused))) {
+  return 0; /* devpts does this all for us! */
+}
+
+__END_DECLS
+
+#endif /* _ANDROID_LEGACY_STDLIB_INLINES_H_ */

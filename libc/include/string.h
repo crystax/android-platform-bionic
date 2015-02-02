@@ -31,10 +31,13 @@
 
 #include <sys/cdefs.h>
 #include <stddef.h>
-#include <malloc.h>
 #include <xlocale.h>
 
 __BEGIN_DECLS
+
+#if defined(__USE_BSD)
+#include <strings.h>
+#endif
 
 extern void*  memccpy(void* __restrict, const void* __restrict, int, size_t);
 extern void*  memchr(const void *, int, size_t) __purefunc;
