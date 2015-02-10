@@ -2,8 +2,8 @@
 
 #include <private/bionic_asm.h>
 
-ENTRY(fchmodat)
-    mov     x8, __NR_fchmodat
+ENTRY(___fchmod)
+    mov     x8, __NR_fchmod
     svc     #0
 
     cmn     x0, #(MAX_ERRNO + 1)
@@ -11,4 +11,5 @@ ENTRY(fchmodat)
     b.hi    __set_errno_internal
 
     ret
-END(fchmodat)
+END(___fchmod)
+.hidden ___fchmod

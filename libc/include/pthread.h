@@ -43,7 +43,7 @@
 #endif
 
 typedef struct {
-  int volatile value;
+  int value;
 #ifdef __LP64__
   char __reserved[36];
 #endif
@@ -73,7 +73,7 @@ enum {
 };
 
 typedef struct {
-  int volatile value;
+  unsigned int value;
 #ifdef __LP64__
   char __reserved[44];
 #endif

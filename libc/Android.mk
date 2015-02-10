@@ -69,6 +69,7 @@ libc_common_src_files += \
     bionic/__FD_chk.cpp \
     bionic/__fgets_chk.cpp \
     bionic/__memmove_chk.cpp \
+    bionic/__poll_chk.cpp \
     bionic/__read_chk.cpp \
     bionic/__recvfrom_chk.cpp \
     bionic/__stpcpy_chk.cpp \
@@ -115,6 +116,8 @@ libc_bionic_src_files := \
     bionic/error.cpp \
     bionic/eventfd_read.cpp \
     bionic/eventfd_write.cpp \
+    bionic/fchmod.cpp \
+    bionic/fchmodat.cpp \
     bionic/ffs.cpp \
     bionic/flockfile.cpp \
     bionic/fork.cpp \
@@ -513,6 +516,23 @@ libc_upstream_openbsd_src_files := \
 libc_arch_static_src_files := \
     bionic/dl_iterate_phdr_static.cpp \
 
+# Various kinds of LP32 cruft.
+# ========================================================
+libc_bionic_src_files_32 += \
+    bionic/mmap.cpp \
+
+libc_common_src_files_32 += \
+    bionic/legacy_32_bit_support.cpp \
+    bionic/ndk_cruft.cpp \
+    bionic/time64.c \
+
+libc_netbsd_src_files_32 += \
+    upstream-netbsd/common/lib/libc/hash/sha1/sha1.c \
+
+libc_openbsd_src_files_32 += \
+    upstream-openbsd/lib/libc/stdio/putw.c \
+
+
 # Define some common cflags
 # ========================================================
 libc_common_cflags := \
@@ -569,12 +589,13 @@ libc_common_c_includes += \
     $(LOCAL_PATH)/stdio   \
 
 # ========================================================
-# Add in the arch-specific flags.
+# Add in the arch or 32-bit specific flags
 # Must be called with $(eval).
 # $(1): the LOCAL_ variable name
 # $(2): the bionic variable name to pull in
 define patch-up-arch-specific-flags
 $(1)_$(TARGET_ARCH) += $($(2)_$(TARGET_ARCH))
+$(1)_32 += $($(2)_32)
 ifdef TARGET_2ND_ARCH
 $(1)_$(TARGET_2ND_ARCH) += $($(2)_$(TARGET_2ND_ARCH))
 endif
@@ -673,15 +694,16 @@ LOCAL_CFLAGS += \
     -DINET6 \
     -fvisibility=hidden \
     -Wno-unused-parameter \
-    -I$(LOCAL_PATH)/dns/include \
-    -I$(LOCAL_PATH)/private \
-    -I$(LOCAL_PATH)/upstream-netbsd/lib/libc/include \
-    -I$(LOCAL_PATH)/upstream-netbsd/android/include \
     -include netbsd-compat.h \
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags)
-LOCAL_C_INCLUDES := $(libc_common_c_includes)
+LOCAL_C_INCLUDES := $(libc_common_c_includes) \
+    $(LOCAL_PATH)/dns/include \
+    $(LOCAL_PATH)/private \
+    $(LOCAL_PATH)/upstream-netbsd/lib/libc/include \
+    $(LOCAL_PATH)/upstream-netbsd/android/include \
+
 LOCAL_MODULE := libc_dns
 LOCAL_CLANG := $(use_clang)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
@@ -707,13 +729,14 @@ LOCAL_SRC_FILES := $(libc_upstream_freebsd_src_files)
 LOCAL_CFLAGS := \
     $(libc_common_cflags) \
     -Wno-sign-compare -Wno-uninitialized \
-    -I$(LOCAL_PATH)/upstream-freebsd/android/include \
-    -I$(LOCAL_PATH)/upstream-freebsd/lib/libc/include \
     -include freebsd-compat.h \
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags)
-LOCAL_C_INCLUDES := $(libc_common_c_includes)
+LOCAL_C_INCLUDES := $(libc_common_c_includes) \
+    $(LOCAL_PATH)/upstream-freebsd/android/include \
+    $(LOCAL_PATH)/upstream-freebsd/lib/libc/include \
+
 LOCAL_MODULE := libc_freebsd
 LOCAL_CLANG := $(use_clang)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
@@ -741,13 +764,14 @@ LOCAL_CFLAGS := \
     $(libc_common_cflags) \
     -Wno-sign-compare -Wno-uninitialized \
     -DPOSIX_MISTAKE \
-    -I$(LOCAL_PATH)/upstream-netbsd/android/include \
-    -I$(LOCAL_PATH)/upstream-netbsd/lib/libc/include \
     -include netbsd-compat.h \
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags)
-LOCAL_C_INCLUDES := $(libc_common_c_includes)
+LOCAL_C_INCLUDES := $(libc_common_c_includes) \
+    $(LOCAL_PATH)/upstream-netbsd/android/include \
+    $(LOCAL_PATH)/upstream-netbsd/lib/libc/include \
+
 LOCAL_MODULE := libc_netbsd
 LOCAL_CLANG := $(use_clang)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
@@ -783,15 +807,16 @@ LOCAL_CFLAGS := \
     -Wno-sign-compare \
     -Wno-uninitialized \
     -Wno-unused-parameter \
-    -I$(LOCAL_PATH)/private \
-    -I$(LOCAL_PATH)/upstream-openbsd/android/include \
-    -I$(LOCAL_PATH)/upstream-openbsd/lib/libc/include \
-    -I$(LOCAL_PATH)/upstream-openbsd/lib/libc/gdtoa/ \
     -include openbsd-compat.h \
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags)
-LOCAL_C_INCLUDES := $(libc_common_c_includes)
+LOCAL_C_INCLUDES := $(libc_common_c_includes) \
+    $(LOCAL_PATH)/private \
+    $(LOCAL_PATH)/upstream-openbsd/android/include \
+    $(LOCAL_PATH)/upstream-openbsd/lib/libc/include \
+    $(LOCAL_PATH)/upstream-openbsd/lib/libc/gdtoa/ \
+
 LOCAL_MODULE := libc_openbsd
 LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
 LOCAL_CXX_STL := none
@@ -826,14 +851,15 @@ LOCAL_CFLAGS := \
     $(libc_common_cflags) \
     -Wno-sign-compare -Wno-uninitialized \
     -fvisibility=hidden \
-    -I$(LOCAL_PATH)/private \
-    -I$(LOCAL_PATH)/upstream-openbsd/android/include \
-    -I$(LOCAL_PATH)/upstream-openbsd/lib/libc/include \
     -include openbsd-compat.h \
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags)
-LOCAL_C_INCLUDES := $(libc_common_c_includes)
+LOCAL_C_INCLUDES := $(libc_common_c_includes) \
+    $(LOCAL_PATH)/private \
+    $(LOCAL_PATH)/upstream-openbsd/android/include \
+    $(LOCAL_PATH)/upstream-openbsd/lib/libc/include \
+
 LOCAL_MODULE := libc_gdtoa
 LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
 LOCAL_CXX_STL := none
@@ -1032,7 +1058,6 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
     $(libc_arch_static_src_files) \
-    $(libc_static_common_src_files) \
     bionic/libc_init_static.cpp
 
 LOCAL_C_INCLUDES := $(libc_common_c_includes)
@@ -1084,7 +1109,6 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
     $(libc_arch_static_src_files) \
-    $(libc_static_common_src_files) \
     bionic/malloc_debug_common.cpp \
     bionic/libc_init_static.cpp \
 
@@ -1119,7 +1143,6 @@ LOCAL_CPPFLAGS := $(libc_common_cppflags)
 LOCAL_C_INCLUDES := $(libc_common_c_includes)
 LOCAL_SRC_FILES := \
     $(libc_arch_dynamic_src_files) \
-    $(libc_static_common_src_files) \
     bionic/malloc_debug_common.cpp \
     bionic/libc_init_dynamic.cpp \
     bionic/NetdClient.cpp \
@@ -1149,13 +1172,10 @@ LOCAL_SYSTEM_SHARED_LIBRARIES :=
 # We'd really like to do this for all architectures, but since this wasn't done
 # before, these symbols must continue to be exported on LP32 for binary
 # compatibility.
-LOCAL_LDFLAGS_arm64 := -Wl,--exclude-libs,libgcc.a
-LOCAL_LDFLAGS_mips64 := -Wl,--exclude-libs,libgcc.a
-LOCAL_LDFLAGS_x86_64 := -Wl,--exclude-libs,libgcc.a
+LOCAL_LDFLAGS_64 := -Wl,--exclude-libs,libgcc.a
 
 $(eval $(call patch-up-arch-specific-flags,LOCAL_CFLAGS,libc_common_cflags))
 $(eval $(call patch-up-arch-specific-flags,LOCAL_SRC_FILES,libc_arch_dynamic_src_files))
-$(eval $(call patch-up-arch-specific-flags,LOCAL_SRC_FILES,libc_static_common_src_files))
 # special for arm
 LOCAL_NO_CRT_arm := true
 LOCAL_CFLAGS_arm += -DCRT_LEGACY_WORKAROUND
@@ -1206,7 +1226,8 @@ LOCAL_CXX_STL := none
 LOCAL_SYSTEM_SHARED_LIBRARIES :=
 # Only need this for arm since libc++ uses its own unwind code that
 # doesn't mix with the other default unwind code.
-LOCAL_STATIC_LIBRARIES_arm := libunwind_llvm libc++abi
+LOCAL_STATIC_LIBRARIES_arm := libunwind_llvm
+LOCAL_STATIC_LIBRARIES += libc++abi
 LOCAL_ALLOW_UNDEFINED_SYMBOLS := true
 
 # Don't install on release build
