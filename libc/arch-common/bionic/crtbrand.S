@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,24 +25,15 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _SYS_PARAM_H_
-#define _SYS_PARAM_H_
 
-#include <limits.h>
-#include <linux/param.h>
-
-#define MAXPATHLEN  PATH_MAX
-#define MAXSYMLINKS 8
-
-/* Macros for counting and rounding. */
-#ifndef howmany
-#define howmany(x, y)   (((x)+((y)-1))/(y))
-#endif
-#define roundup(x, y)   ((((x)+((y)-1))/(y))*(y))
-#define powerof2(x)     ((((x)-1)&(x))==0)
-
-/* Macros for min/max. */
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
-#endif /* _SYS_PARAM_H_ */
+	.section	.note.android.ident,"a",%note
+	.align	2
+	.type	abitag, %object
+abitag:
+	.long	2f-1f			/* int32_t namesz */
+	.long	3f-2f			/* int32_t descsz */
+	.long	1			/* int32_t type */
+1:	.ascii	"Android\0"		/* char name[] */
+2:	.long	PLATFORM_SDK_VERSION	/* int32_t android_api */
+3:
+	.size	abitag, .-abitag
