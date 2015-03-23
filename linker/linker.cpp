@@ -57,6 +57,7 @@
 #include "linker_phdr.h"
 #include "linker_relocs.h"
 #include "linker_reloc_iterators.h"
+#include "ziparchive/zip_archive.h"
 
 /* >>> IMPORTANT NOTE - READ ME BEFORE MODIFYING <<<
  *
@@ -76,19 +77,6 @@
 // Override macros to use C++ style casts
 #undef ELF_ST_TYPE
 #define ELF_ST_TYPE(x) (static_cast<uint32_t>(x) & 0xf)
-
-#if defined(__LP64__)
-#define SEARCH_NAME(x) x
-#else
-// Nvidia drivers are relying on the bug:
-// http://code.google.com/p/android/issues/detail?id=6670
-// so we continue to use base-name lookup for lp32
-static const char* get_base_name(const char* name) {
-  const char* bname = strrchr(name, '/');
-  return bname ? bname + 1 : name;
-}
-#define SEARCH_NAME(x) get_base_name(x)
-#endif
 
 static ElfW(Addr) get_elf_exec_load_bias(const ElfW(Ehdr)* elf);
 
@@ -146,18 +134,6 @@ void count_relocation(RelocationKind) {
 #if COUNT_PAGES
 uint32_t bitmask[4096];
 #endif
-
-// You shouldn't try to call memory-allocating functions in the dynamic linker.
-// Guard against the most obvious ones.
-#define DISALLOW_ALLOCATION(return_type, name, ...) \
-    return_type name __VA_ARGS__ \
-    { \
-      __libc_fatal("ERROR: " #name " called from the dynamic linker!\n"); \
-    }
-DISALLOW_ALLOCATION(void*, malloc, (size_t u __unused));
-DISALLOW_ALLOCATION(void, free, (void* u __unused));
-DISALLOW_ALLOCATION(void*, realloc, (void* u1 __unused, size_t u2 __unused));
-DISALLOW_ALLOCATION(void*, calloc, (size_t u1 __unused, size_t u2 __unused));
 
 static char __linker_dl_err_buf[768];
 
@@ -850,41 +826,117 @@ ElfW(Sym)* soinfo::elf_addr_lookup(const void* addr) {
   return nullptr;
 }
 
-static int open_library_on_path(const char* name, const char* const paths[]) {
-  char buf[512];
-  for (size_t i = 0; paths[i] != nullptr; ++i) {
-    int n = __libc_format_buffer(buf, sizeof(buf), "%s/%s", paths[i], name);
-    if (n < 0 || n >= static_cast<int>(sizeof(buf))) {
-      PRINT("Warning: ignoring very long library path: %s/%s", paths[i], name);
-      continue;
-    }
-    int fd = TEMP_FAILURE_RETRY(open(buf, O_RDONLY | O_CLOEXEC));
-    if (fd != -1) {
-      return fd;
-    }
+static int open_library_in_zipfile(const char* const path,
+                                   off64_t* file_offset) {
+  TRACE("Trying zip file open from path '%s'", path);
+
+  // Treat an '!' character inside a path as the separator between the name
+  // of the zip file on disk and the subdirectory to search within it.
+  // For example, if path is "foo.zip!bar/bas/x.so", then we search for
+  // "bar/bas/x.so" within "foo.zip".
+  const char* separator = strchr(path, '!');
+  if (separator == nullptr) {
+    return -1;
   }
-  return -1;
+
+  char buf[512];
+  if (strlcpy(buf, path, sizeof(buf)) >= sizeof(buf)) {
+    PRINT("Warning: ignoring very long library path: %s", path);
+    return -1;
+  }
+
+  buf[separator - path] = '\0';
+
+  const char* zip_path = buf;
+  const char* file_path = &buf[separator - path + 1];
+  int fd = TEMP_FAILURE_RETRY(open(zip_path, O_RDONLY | O_CLOEXEC));
+  if (fd == -1) {
+    return -1;
+  }
+
+  ZipArchiveHandle handle;
+  if (OpenArchiveFd(fd, "", &handle, false) != 0) {
+    // invalid zip-file (?)
+    close(fd);
+    return -1;
+  }
+
+  auto archive_guard = make_scope_guard([&]() {
+    CloseArchive(handle);
+  });
+
+  ZipEntry entry;
+
+  if (FindEntry(handle, ZipEntryName(file_path), &entry) != 0) {
+    // Entry was not found.
+    close(fd);
+    return -1;
+  }
+
+  // Check if it is properly stored
+  if (entry.method != kCompressStored || (entry.offset % PAGE_SIZE) != 0) {
+    close(fd);
+    return -1;
+  }
+
+  *file_offset = entry.offset;
+  return fd;
 }
 
-static int open_library(const char* name) {
+static int open_library_on_path(const char* name,
+                                const char* const paths[],
+                                off64_t* file_offset) {
+  char buf[512];
+  int fd = -1;
+
+  for (size_t i = 0; paths[i] != nullptr && fd == -1; ++i) {
+    const char* const path = paths[i];
+    int n = __libc_format_buffer(buf, sizeof(buf), "%s/%s", path, name);
+    if (n < 0 || n >= static_cast<int>(sizeof(buf))) {
+      PRINT("Warning: ignoring very long library path: %s/%s", path, name);
+      return -1;
+    }
+
+    const char* separator = strchr(path, '!');
+
+    if (separator != nullptr) {
+      fd = open_library_in_zipfile(buf, file_offset);
+    }
+
+    if (fd == -1) {
+      fd = TEMP_FAILURE_RETRY(open(buf, O_RDONLY | O_CLOEXEC));
+      if (fd != -1) {
+        *file_offset = 0;
+      }
+    }
+  }
+
+  return fd;
+}
+
+static int open_library(const char* name, off64_t* file_offset) {
   TRACE("[ opening %s ]", name);
 
   // If the name contains a slash, we should attempt to open it directly and not search the paths.
   if (strchr(name, '/') != nullptr) {
+    if (strchr(name, '!') != nullptr) {
+      int fd = open_library_in_zipfile(name, file_offset);
+      if (fd != -1) {
+        return fd;
+      }
+    }
+
     int fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_CLOEXEC));
     if (fd != -1) {
-      return fd;
+      *file_offset = 0;
     }
-    // ...but nvidia binary blobs (at least) rely on this behavior, so fall through for now.
-#if defined(__LP64__)
-    return -1;
-#endif
+    return fd;
   }
 
   // Otherwise we try LD_LIBRARY_PATH first, and fall back to the built-in well known paths.
-  int fd = open_library_on_path(name, g_ld_library_paths);
+  int fd = open_library_on_path(name, g_ld_library_paths, file_offset);
   if (fd == -1) {
-    fd = open_library_on_path(name, kDefaultLdPaths);
+    fd = open_library_on_path(name, kDefaultLdPaths, file_offset);
   }
   return fd;
 }
@@ -898,7 +950,9 @@ static void for_each_dt_needed(const soinfo* si, F action) {
   }
 }
 
-static soinfo* load_library(LoadTaskList& load_tasks, const char* name, int rtld_flags, const android_dlextinfo* extinfo) {
+static soinfo* load_library(LoadTaskList& load_tasks,
+                            const char* name, int rtld_flags,
+                            const android_dlextinfo* extinfo) {
   int fd = -1;
   off64_t file_offset = 0;
   ScopedFd file_guard(-1);
@@ -910,7 +964,7 @@ static soinfo* load_library(LoadTaskList& load_tasks, const char* name, int rtld
     }
   } else {
     // Open the file.
-    fd = open_library(name);
+    fd = open_library(name, &file_offset);
     if (fd == -1) {
       DL_ERR("library \"%s\" not found", name);
       return nullptr;
@@ -962,7 +1016,7 @@ static soinfo* load_library(LoadTaskList& load_tasks, const char* name, int rtld
     return nullptr;
   }
 
-  soinfo* si = soinfo_alloc(SEARCH_NAME(name), &file_stat, file_offset, rtld_flags);
+  soinfo* si = soinfo_alloc(name, &file_stat, file_offset, rtld_flags);
   if (si == nullptr) {
     return nullptr;
   }
@@ -984,10 +1038,15 @@ static soinfo* load_library(LoadTaskList& load_tasks, const char* name, int rtld
   return si;
 }
 
-static soinfo *find_loaded_library_by_name(const char* name) {
-  const char* search_name = SEARCH_NAME(name);
+static soinfo *find_loaded_library_by_soname(const char* name) {
+  // Ignore filename with path.
+  if (strchr(name, '/') != nullptr) {
+    return nullptr;
+  }
+
   for (soinfo* si = solist; si != nullptr; si = si->next) {
-    if (!strcmp(search_name, si->name)) {
+    const char* soname = si->get_soname();
+    if (soname != nullptr && (strcmp(name, soname) == 0)) {
       return si;
     }
   }
@@ -995,13 +1054,12 @@ static soinfo *find_loaded_library_by_name(const char* name) {
 }
 
 static soinfo* find_library_internal(LoadTaskList& load_tasks, const char* name, int rtld_flags, const android_dlextinfo* extinfo) {
-
-  soinfo* si = find_loaded_library_by_name(name);
+  soinfo* si = find_loaded_library_by_soname(name);
 
   // Library might still be loaded, the accurate detection
   // of this fact is done by load_library.
   if (si == nullptr) {
-    TRACE("[ '%s' has not been found by name.  Trying harder...]", name);
+    TRACE("[ '%s' has not been found by soname.  Trying harder...]", name);
     si = load_library(load_tasks, name, rtld_flags, extinfo);
   }
 
@@ -1765,6 +1823,7 @@ uint32_t soinfo::get_dt_flags_1() const {
 
   return 0;
 }
+
 void soinfo::set_dt_flags_1(uint32_t dt_flags_1) {
   if (has_min_version(1)) {
     if ((dt_flags_1 & DF_1_GLOBAL) != 0) {
@@ -1776,6 +1835,14 @@ void soinfo::set_dt_flags_1(uint32_t dt_flags_1) {
     }
 
     dt_flags_1_ = dt_flags_1;
+  }
+}
+
+const char* soinfo::get_soname() {
+  if (has_min_version(2)) {
+    return soname_;
+  } else {
+    return name;
   }
 }
 
@@ -1945,14 +2012,17 @@ bool soinfo::prelink_image() {
 #endif
 
   // Extract useful information from dynamic section.
+  // Note that: "Except for the DT_NULL element at the end of the array,
+  // and the relative order of DT_NEEDED elements, entries may appear in any order."
+  //
+  // source: http://www.sco.com/developers/gabi/1998-04-29/ch5.dynamic.html
   uint32_t needed_count = 0;
   for (ElfW(Dyn)* d = dynamic; d->d_tag != DT_NULL; ++d) {
     DEBUG("d = %p, d[0](tag) = %p d[1](val) = %p",
           d, reinterpret_cast<void*>(d->d_tag), reinterpret_cast<void*>(d->d_un.d_val));
     switch (d->d_tag) {
       case DT_SONAME:
-        // TODO: glibc dynamic linker uses this name for
-        // initial library lookup; consider doing the same here.
+        // this is parsed after we have strtab initialized (see below).
         break;
 
       case DT_HASH:
@@ -2272,6 +2342,14 @@ bool soinfo::prelink_image() {
               reinterpret_cast<void*>(d->d_tag), reinterpret_cast<void*>(d->d_un.d_val));
         }
         break;
+    }
+  }
+
+  // second pass - parse entries relying on strtab
+  for (ElfW(Dyn)* d = dynamic; d->d_tag != DT_NULL; ++d) {
+    if (d->d_tag == DT_SONAME) {
+      soname_ = get_string(d->d_un.d_val);
+      break;
     }
   }
 

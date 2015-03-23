@@ -92,7 +92,7 @@
 
 #define SUPPORTED_DT_FLAGS_1 (DF_1_NOW | DF_1_GLOBAL | DF_1_NODELETE)
 
-#define SOINFO_VERSION 1
+#define SOINFO_VERSION 2
 
 #define SOINFO_NAME_LEN 128
 
@@ -149,13 +149,13 @@ struct soinfo {
   ElfW(Addr) base;
   size_t size;
 
-#ifndef __LP64__
+#if defined(__arm__)
   uint32_t unused1;  // DO NOT USE, maintained for compatibility.
 #endif
 
   ElfW(Dyn)* dynamic;
 
-#ifndef __LP64__
+#if defined(__arm__)
   uint32_t unused2; // DO NOT USE, maintained for compatibility
   uint32_t unused3; // DO NOT USE, maintained for compatibility
 #endif
@@ -278,6 +278,8 @@ struct soinfo {
 
   soinfo* get_local_group_root() const;
 
+  const char* get_soname();
+
  private:
   ElfW(Sym)* elf_lookup(SymbolName& symbol_name);
   ElfW(Sym)* elf_addr_lookup(const void* addr);
@@ -321,6 +323,8 @@ struct soinfo {
 
   uint8_t* android_relocs_;
   size_t android_relocs_size_;
+
+  const char* soname_;
 
   friend soinfo* get_libdl_info();
 };

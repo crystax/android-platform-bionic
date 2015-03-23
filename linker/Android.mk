@@ -6,9 +6,11 @@ LOCAL_SRC_FILES:= \
     debugger.cpp \
     dlfcn.cpp \
     linker.cpp \
+    linker_allocator.cpp \
     linker_block_allocator.cpp \
     linker_environ.cpp \
     linker_libc_support.c \
+    linker_memory.cpp \
     linker_phdr.cpp \
     rt.cpp \
 
@@ -55,7 +57,7 @@ LOCAL_ASFLAGS := $(LOCAL_CFLAGS)
 
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
-LOCAL_STATIC_LIBRARIES := libc_nomalloc
+LOCAL_STATIC_LIBRARIES := libc_nomalloc libziparchive libutils libz liblog
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 

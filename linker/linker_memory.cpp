@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,25 @@
  * limitations under the License.
  */
 
-#include <gtest/gtest.h>
+#include "linker_allocator.h"
 
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <stdlib.h>
 
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
+static LinkerMemoryAllocator g_linker_allocator;
 
-template<typename F>
-void test_isolated(F test) {
-  int pid = fork();
-  ASSERT_NE(-1, pid) << strerror(errno);
-
-  if (pid == 0) {
-    test();
-    _exit(testing::Test::HasFailure() ? 1 : 0);
-  }
-
-  int status;
-  ASSERT_EQ(pid, waitpid(pid, &status, 0));
-  ASSERT_TRUE(WIFEXITED(status));
-  ASSERT_EQ(0, WEXITSTATUS(status)) << "Forked test has failed, see above..";
+void* malloc(size_t byte_count) {
+  return g_linker_allocator.alloc(byte_count);
 }
+
+void* calloc(size_t item_count, size_t item_size) {
+  return g_linker_allocator.alloc(item_count*item_size);
+}
+
+void* realloc(void* p, size_t byte_count) {
+  return g_linker_allocator.realloc(p, byte_count);
+}
+
+void free(void* ptr) {
+  g_linker_allocator.free(ptr);
+}
+
