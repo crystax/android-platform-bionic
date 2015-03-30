@@ -16,10 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "private/ScopeGuard.h"
-#include "BionicDeathTest.h"
-#include "ScopedSignalHandler.h"
-
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -33,6 +29,12 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <vector>
+
+#include "private/bionic_macros.h"
+#include "private/ScopeGuard.h"
+#include "BionicDeathTest.h"
+#include "ScopedSignalHandler.h"
 
 TEST(pthread, pthread_key_create) {
   pthread_key_t key;
@@ -1188,54 +1190,84 @@ TEST(pthread, pthread_mutexattr_gettype) {
   ASSERT_EQ(0, pthread_mutexattr_destroy(&attr));
 }
 
-static void CreateMutex(pthread_mutex_t& mutex, int mutex_type) {
-  pthread_mutexattr_t attr;
-  ASSERT_EQ(0, pthread_mutexattr_init(&attr));
-  ASSERT_EQ(0, pthread_mutexattr_settype(&attr, mutex_type));
-  ASSERT_EQ(0, pthread_mutex_init(&mutex, &attr));
-  ASSERT_EQ(0, pthread_mutexattr_destroy(&attr));
-}
+struct PthreadMutex {
+  pthread_mutex_t lock;
+
+  PthreadMutex(int mutex_type) {
+    init(mutex_type);
+  }
+
+  ~PthreadMutex() {
+    destroy();
+  }
+
+ private:
+  void init(int mutex_type) {
+    pthread_mutexattr_t attr;
+    ASSERT_EQ(0, pthread_mutexattr_init(&attr));
+    ASSERT_EQ(0, pthread_mutexattr_settype(&attr, mutex_type));
+    ASSERT_EQ(0, pthread_mutex_init(&lock, &attr));
+    ASSERT_EQ(0, pthread_mutexattr_destroy(&attr));
+  }
+
+  void destroy() {
+    ASSERT_EQ(0, pthread_mutex_destroy(&lock));
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(PthreadMutex);
+};
 
 TEST(pthread, pthread_mutex_lock_NORMAL) {
-  pthread_mutex_t lock;
-  CreateMutex(lock, PTHREAD_MUTEX_NORMAL);
+  PthreadMutex m(PTHREAD_MUTEX_NORMAL);
 
-  ASSERT_EQ(0, pthread_mutex_lock(&lock));
-  ASSERT_EQ(0, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(0, pthread_mutex_destroy(&lock));
+  ASSERT_EQ(0, pthread_mutex_lock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_unlock(&m.lock));
 }
 
 TEST(pthread, pthread_mutex_lock_ERRORCHECK) {
-  pthread_mutex_t lock;
-  CreateMutex(lock, PTHREAD_MUTEX_ERRORCHECK);
+  PthreadMutex m(PTHREAD_MUTEX_ERRORCHECK);
 
-  ASSERT_EQ(0, pthread_mutex_lock(&lock));
-  ASSERT_EQ(EDEADLK, pthread_mutex_lock(&lock));
-  ASSERT_EQ(0, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(0, pthread_mutex_trylock(&lock));
-  ASSERT_EQ(EBUSY, pthread_mutex_trylock(&lock));
-  ASSERT_EQ(0, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(EPERM, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(0, pthread_mutex_destroy(&lock));
+  ASSERT_EQ(0, pthread_mutex_lock(&m.lock));
+  ASSERT_EQ(EDEADLK, pthread_mutex_lock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_unlock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_trylock(&m.lock));
+  ASSERT_EQ(EBUSY, pthread_mutex_trylock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_unlock(&m.lock));
+  ASSERT_EQ(EPERM, pthread_mutex_unlock(&m.lock));
 }
 
 TEST(pthread, pthread_mutex_lock_RECURSIVE) {
-  pthread_mutex_t lock;
-  CreateMutex(lock, PTHREAD_MUTEX_RECURSIVE);
+  PthreadMutex m(PTHREAD_MUTEX_RECURSIVE);
 
-  ASSERT_EQ(0, pthread_mutex_lock(&lock));
-  ASSERT_EQ(0, pthread_mutex_lock(&lock));
-  ASSERT_EQ(0, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(0, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(0, pthread_mutex_trylock(&lock));
-  ASSERT_EQ(0, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(EPERM, pthread_mutex_unlock(&lock));
-  ASSERT_EQ(0, pthread_mutex_destroy(&lock));
+  ASSERT_EQ(0, pthread_mutex_lock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_lock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_unlock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_unlock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_trylock(&m.lock));
+  ASSERT_EQ(0, pthread_mutex_unlock(&m.lock));
+  ASSERT_EQ(EPERM, pthread_mutex_unlock(&m.lock));
+}
+
+TEST(pthread, pthread_mutex_init_same_as_static_initializers) {
+  pthread_mutex_t lock_normal = PTHREAD_MUTEX_INITIALIZER;
+  PthreadMutex m1(PTHREAD_MUTEX_NORMAL);
+  ASSERT_EQ(0, memcmp(&lock_normal, &m1.lock, sizeof(pthread_mutex_t)));
+  pthread_mutex_destroy(&lock_normal);
+
+  pthread_mutex_t lock_errorcheck = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+  PthreadMutex m2(PTHREAD_MUTEX_ERRORCHECK);
+  ASSERT_EQ(0, memcmp(&lock_errorcheck, &m2.lock, sizeof(pthread_mutex_t)));
+  pthread_mutex_destroy(&lock_errorcheck);
+
+  pthread_mutex_t lock_recursive = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+  PthreadMutex m3(PTHREAD_MUTEX_RECURSIVE);
+  ASSERT_EQ(0, memcmp(&lock_recursive, &m3.lock, sizeof(pthread_mutex_t)));
+  ASSERT_EQ(0, pthread_mutex_destroy(&lock_recursive));
 }
 
 class MutexWakeupHelper {
  private:
-  pthread_mutex_t mutex;
+  PthreadMutex m;
   enum Progress {
     LOCK_INITIALIZED,
     LOCK_WAITING,
@@ -1248,17 +1280,19 @@ class MutexWakeupHelper {
     ASSERT_EQ(LOCK_INITIALIZED, helper->progress);
     helper->progress = LOCK_WAITING;
 
-    ASSERT_EQ(0, pthread_mutex_lock(&helper->mutex));
+    ASSERT_EQ(0, pthread_mutex_lock(&helper->m.lock));
     ASSERT_EQ(LOCK_RELEASED, helper->progress);
-    ASSERT_EQ(0, pthread_mutex_unlock(&helper->mutex));
+    ASSERT_EQ(0, pthread_mutex_unlock(&helper->m.lock));
 
     helper->progress = LOCK_ACCESSED;
   }
 
  public:
-  void test(int mutex_type) {
-    CreateMutex(mutex, mutex_type);
-    ASSERT_EQ(0, pthread_mutex_lock(&mutex));
+  MutexWakeupHelper(int mutex_type) : m(mutex_type) {
+  }
+
+  void test() {
+    ASSERT_EQ(0, pthread_mutex_lock(&m.lock));
     progress = LOCK_INITIALIZED;
 
     pthread_t thread;
@@ -1270,27 +1304,26 @@ class MutexWakeupHelper {
     }
     usleep(5000);
     progress = LOCK_RELEASED;
-    ASSERT_EQ(0, pthread_mutex_unlock(&mutex));
+    ASSERT_EQ(0, pthread_mutex_unlock(&m.lock));
 
     ASSERT_EQ(0, pthread_join(thread, NULL));
     ASSERT_EQ(LOCK_ACCESSED, progress);
-    ASSERT_EQ(0, pthread_mutex_destroy(&mutex));
   }
 };
 
 TEST(pthread, pthread_mutex_NORMAL_wakeup) {
-  MutexWakeupHelper helper;
-  helper.test(PTHREAD_MUTEX_NORMAL);
+  MutexWakeupHelper helper(PTHREAD_MUTEX_NORMAL);
+  helper.test();
 }
 
 TEST(pthread, pthread_mutex_ERRORCHECK_wakeup) {
-  MutexWakeupHelper helper;
-  helper.test(PTHREAD_MUTEX_ERRORCHECK);
+  MutexWakeupHelper helper(PTHREAD_MUTEX_ERRORCHECK);
+  helper.test();
 }
 
 TEST(pthread, pthread_mutex_RECURSIVE_wakeup) {
-  MutexWakeupHelper helper;
-  helper.test(PTHREAD_MUTEX_RECURSIVE);
+  MutexWakeupHelper helper(PTHREAD_MUTEX_RECURSIVE);
+  helper.test();
 }
 
 TEST(pthread, pthread_mutex_owner_tid_limit) {
@@ -1302,4 +1335,61 @@ TEST(pthread, pthread_mutex_owner_tid_limit) {
   // Current pthread_mutex uses 16 bits to represent owner tid.
   // Change the implementation if we need to support higher value than 65535.
   ASSERT_LE(pid_max, 65536);
+}
+
+class StrictAlignmentAllocator {
+ public:
+  void* allocate(size_t size, size_t alignment) {
+    char* p = new char[size + alignment * 2];
+    allocated_array.push_back(p);
+    while (!is_strict_aligned(p, alignment)) {
+      ++p;
+    }
+    return p;
+  }
+
+  ~StrictAlignmentAllocator() {
+    for (auto& p : allocated_array) {
+      delete [] p;
+    }
+  }
+
+ private:
+  bool is_strict_aligned(char* p, size_t alignment) {
+    return (reinterpret_cast<uintptr_t>(p) % (alignment * 2)) == alignment;
+  }
+
+  std::vector<char*> allocated_array;
+};
+
+TEST(pthread, pthread_types_allow_four_bytes_alignment) {
+#if defined(__BIONIC__)
+  // For binary compatibility with old version, we need to allow 4-byte aligned data for pthread types.
+  StrictAlignmentAllocator allocator;
+  pthread_mutex_t* mutex = reinterpret_cast<pthread_mutex_t*>(
+                             allocator.allocate(sizeof(pthread_mutex_t), 4));
+  ASSERT_EQ(0, pthread_mutex_init(mutex, NULL));
+  ASSERT_EQ(0, pthread_mutex_lock(mutex));
+  ASSERT_EQ(0, pthread_mutex_unlock(mutex));
+  ASSERT_EQ(0, pthread_mutex_destroy(mutex));
+
+  pthread_cond_t* cond = reinterpret_cast<pthread_cond_t*>(
+                           allocator.allocate(sizeof(pthread_cond_t), 4));
+  ASSERT_EQ(0, pthread_cond_init(cond, NULL));
+  ASSERT_EQ(0, pthread_cond_signal(cond));
+  ASSERT_EQ(0, pthread_cond_broadcast(cond));
+  ASSERT_EQ(0, pthread_cond_destroy(cond));
+
+  pthread_rwlock_t* rwlock = reinterpret_cast<pthread_rwlock_t*>(
+                               allocator.allocate(sizeof(pthread_rwlock_t), 4));
+  ASSERT_EQ(0, pthread_rwlock_init(rwlock, NULL));
+  ASSERT_EQ(0, pthread_rwlock_rdlock(rwlock));
+  ASSERT_EQ(0, pthread_rwlock_unlock(rwlock));
+  ASSERT_EQ(0, pthread_rwlock_wrlock(rwlock));
+  ASSERT_EQ(0, pthread_rwlock_unlock(rwlock));
+  ASSERT_EQ(0, pthread_rwlock_destroy(rwlock));
+
+#else
+  GTEST_LOG_(INFO) << "This test tests bionic implementation details.";
+#endif
 }
