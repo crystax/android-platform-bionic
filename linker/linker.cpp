@@ -140,10 +140,13 @@ size_t linker_get_error_buffer_size() {
 
 // This function is an empty stub where GDB locates a breakpoint to get notified
 // about linker activity.
-extern "C" void __attribute__((noinline)) __attribute__((visibility("default"))) rtld_db_dlactivity();
+extern "C"
+void __attribute__((noinline)) __attribute__((visibility("default"))) rtld_db_dlactivity();
 
 static pthread_mutex_t g__r_debug_mutex = PTHREAD_MUTEX_INITIALIZER;
-static r_debug _r_debug = {1, nullptr, reinterpret_cast<uintptr_t>(&rtld_db_dlactivity), r_debug::RT_CONSISTENT, 0};
+static r_debug _r_debug =
+    {1, nullptr, reinterpret_cast<uintptr_t>(&rtld_db_dlactivity), r_debug::RT_CONSISTENT, 0};
+
 static link_map* r_debug_tail = 0;
 
 static void insert_soinfo_into_debug_map(soinfo* info) {
@@ -233,7 +236,8 @@ void SoinfoListAllocator::free(LinkedListEntry<soinfo>* entry) {
   g_soinfo_links_allocator.free(entry);
 }
 
-static soinfo* soinfo_alloc(const char* name, struct stat* file_stat, off64_t file_offset, uint32_t rtld_flags) {
+static soinfo* soinfo_alloc(const char* name, struct stat* file_stat,
+                            off64_t file_offset, uint32_t rtld_flags) {
   if (strlen(name) >= SOINFO_NAME_LEN) {
     DL_ERR("library name \"%s\" too long", name);
     return nullptr;
@@ -434,7 +438,8 @@ ElfW(Sym)* soinfo::elf_lookup(SymbolName& symbol_name) {
 
   for (uint32_t n = bucket_[hash % nbucket_]; n != 0; n = chain_[n]) {
     ElfW(Sym)* s = symtab_ + n;
-    if (strcmp(get_string(s->st_name), symbol_name.get_name()) == 0 && is_symbol_global_and_defined(this, s)) {
+    if (strcmp(get_string(s->st_name), symbol_name.get_name()) == 0 &&
+        is_symbol_global_and_defined(this, s)) {
       TRACE_TYPE(LOOKUP, "FOUND %s in %s (%p) %zd",
                symbol_name.get_name(), name, reinterpret_cast<void*>(s->st_value),
                static_cast<size_t>(s->st_size));
@@ -448,7 +453,8 @@ ElfW(Sym)* soinfo::elf_lookup(SymbolName& symbol_name) {
   return nullptr;
 }
 
-soinfo::soinfo(const char* name, const struct stat* file_stat, off64_t file_offset, int rtld_flags) {
+soinfo::soinfo(const char* name, const struct stat* file_stat,
+               off64_t file_offset, int rtld_flags) {
   memset(this, 0, sizeof(*this));
 
   strlcpy(this->name, name, sizeof(this->name));
@@ -732,15 +738,21 @@ ElfW(Sym)* dlsym_handle_lookup(soinfo* si, soinfo** found, const char* name) {
    beginning of the global solist. Otherwise the search starts at the
    specified soinfo (for RTLD_NEXT).
  */
-ElfW(Sym)* dlsym_linear_lookup(const char* name, soinfo** found, soinfo* start) {
+ElfW(Sym)* dlsym_linear_lookup(const char* name, soinfo** found, soinfo* caller, void* handle) {
   SymbolName symbol_name(name);
 
-  if (start == nullptr) {
-    start = solist;
+  soinfo* start = solist;
+
+  if (handle == RTLD_NEXT) {
+    if (caller == nullptr || caller->next == nullptr) {
+      return nullptr;
+    } else {
+      start = caller->next;
+    }
   }
 
   ElfW(Sym)* s = nullptr;
-  for (soinfo* si = start; (s == nullptr) && (si != nullptr); si = si->next) {
+  for (soinfo* si = start; si != nullptr; si = si->next) {
     if ((si->get_rtld_flags() & RTLD_GLOBAL) == 0) {
       continue;
     }
@@ -749,6 +761,30 @@ ElfW(Sym)* dlsym_linear_lookup(const char* name, soinfo** found, soinfo* start) 
     if (s != nullptr) {
       *found = si;
       break;
+    }
+  }
+
+  // If not found - look into local_group unless
+  // caller is part of the global group in which
+  // case we already did it.
+  if (s == nullptr && caller != nullptr &&
+      (caller->get_rtld_flags() & RTLD_GLOBAL) == 0) {
+    soinfo* local_group_root = caller->get_local_group_root();
+
+    if (handle == RTLD_DEFAULT) {
+      start = local_group_root;
+    }
+
+    for (soinfo* si = start; si != nullptr; si = si->next) {
+      if (si->get_local_group_root() != local_group_root) {
+        break;
+      }
+
+      s = si->find_symbol_by_name(symbol_name);
+      if (s != nullptr) {
+        *found = si;
+        break;
+      }
     }
   }
 
@@ -1002,20 +1038,24 @@ static soinfo* load_library(LoadTaskList& load_tasks,
     return nullptr;
   }
   if (file_offset >= file_stat.st_size) {
-    DL_ERR("file offset for the library \"%s\" >= file size: %" PRId64 " >= %" PRId64, name, file_offset, file_stat.st_size);
+    DL_ERR("file offset for the library \"%s\" >= file size: %" PRId64 " >= %" PRId64,
+        name, file_offset, file_stat.st_size);
     return nullptr;
   }
 
   // Check for symlink and other situations where
-  // file can have different names.
-  for (soinfo* si = solist; si != nullptr; si = si->next) {
-    if (si->get_st_dev() != 0 &&
-        si->get_st_ino() != 0 &&
-        si->get_st_dev() == file_stat.st_dev &&
-        si->get_st_ino() == file_stat.st_ino &&
-        si->get_file_offset() == file_offset) {
-      TRACE("library \"%s\" is already loaded under different name/path \"%s\" - will return existing soinfo", name, si->name);
-      return si;
+  // file can have different names, unless ANDROID_DLEXT_FORCE_LOAD is set
+  if (extinfo == nullptr || (extinfo->flags & ANDROID_DLEXT_FORCE_LOAD) == 0) {
+    for (soinfo* si = solist; si != nullptr; si = si->next) {
+      if (si->get_st_dev() != 0 &&
+          si->get_st_ino() != 0 &&
+          si->get_st_dev() == file_stat.st_dev &&
+          si->get_st_ino() == file_stat.st_ino &&
+          si->get_file_offset() == file_offset) {
+        TRACE("library \"%s\" is already loaded under different name/path \"%s\" - "
+            "will return existing soinfo", name, si->name);
+        return si;
+      }
     }
   }
 
@@ -1067,7 +1107,8 @@ static soinfo *find_loaded_library_by_soname(const char* name) {
   return nullptr;
 }
 
-static soinfo* find_library_internal(LoadTaskList& load_tasks, const char* name, int rtld_flags, const android_dlextinfo* extinfo) {
+static soinfo* find_library_internal(LoadTaskList& load_tasks, const char* name,
+                                     int rtld_flags, const android_dlextinfo* extinfo) {
   soinfo* si = find_loaded_library_by_soname(name);
 
   // Library might still be loaded, the accurate detection
@@ -1141,7 +1182,8 @@ static bool find_libraries(soinfo* start_with, const char* const library_names[]
   });
 
   // Step 1: load and pre-link all DT_NEEDED libraries in breadth first order.
-  for (LoadTask::unique_ptr task(load_tasks.pop_front()); task.get() != nullptr; task.reset(load_tasks.pop_front())) {
+  for (LoadTask::unique_ptr task(load_tasks.pop_front());
+      task.get() != nullptr; task.reset(load_tasks.pop_front())) {
     soinfo* si = find_library_internal(load_tasks, task->get_name(), rtld_flags, extinfo);
     if (si == nullptr) {
       return false;
@@ -1320,8 +1362,8 @@ void do_android_get_LD_LIBRARY_PATH(char* buffer, size_t buffer_size) {
   // snprintf again.
   size_t required_len = strlen(kDefaultLdPaths[0]) + strlen(kDefaultLdPaths[1]) + 2;
   if (buffer_size < required_len) {
-    __libc_fatal("android_get_LD_LIBRARY_PATH failed, buffer too small: buffer len %zu, required len %zu",
-                 buffer_size, required_len);
+    __libc_fatal("android_get_LD_LIBRARY_PATH failed, buffer too small: "
+                 "buffer len %zu, required len %zu", buffer_size, required_len);
   }
   char* end = stpcpy(buffer, kDefaultLdPaths[0]);
   *end = ':';
@@ -1344,7 +1386,8 @@ soinfo* do_dlopen(const char* name, int flags, const android_dlextinfo* extinfo)
     }
     if ((extinfo->flags & ANDROID_DLEXT_USE_LIBRARY_FD) == 0 &&
         (extinfo->flags & ANDROID_DLEXT_USE_LIBRARY_FD_OFFSET) != 0) {
-      DL_ERR("invalid extended flag combination (ANDROID_DLEXT_USE_LIBRARY_FD_OFFSET without ANDROID_DLEXT_USE_LIBRARY_FD): 0x%" PRIx64, extinfo->flags);
+      DL_ERR("invalid extended flag combination (ANDROID_DLEXT_USE_LIBRARY_FD_OFFSET without "
+          "ANDROID_DLEXT_USE_LIBRARY_FD): 0x%" PRIx64, extinfo->flags);
       return nullptr;
     }
   }
@@ -1366,7 +1409,8 @@ static ElfW(Addr) call_ifunc_resolver(ElfW(Addr) resolver_addr) {
   typedef ElfW(Addr) (*ifunc_resolver_t)(void);
   ifunc_resolver_t ifunc_resolver = reinterpret_cast<ifunc_resolver_t>(resolver_addr);
   ElfW(Addr) ifunc_addr = ifunc_resolver();
-  TRACE_TYPE(RELO, "Called ifunc_resolver@%p. The result is %p", ifunc_resolver, reinterpret_cast<void*>(ifunc_addr));
+  TRACE_TYPE(RELO, "Called ifunc_resolver@%p. The result is %p",
+      ifunc_resolver, reinterpret_cast<void*>(ifunc_addr));
 
   return ifunc_addr;
 }
@@ -1378,7 +1422,8 @@ static ElfW(Addr) get_addend(ElfW(Rela)* rela, ElfW(Addr) reloc_addr __unused) {
 }
 #else
 static ElfW(Addr) get_addend(ElfW(Rel)* rel, ElfW(Addr) reloc_addr) {
-  if (ELFW(R_TYPE)(rel->r_info) == R_GENERIC_RELATIVE || ELFW(R_TYPE)(rel->r_info) == R_GENERIC_IRELATIVE) {
+  if (ELFW(R_TYPE)(rel->r_info) == R_GENERIC_RELATIVE ||
+      ELFW(R_TYPE)(rel->r_info) == R_GENERIC_IRELATIVE) {
     return *reinterpret_cast<ElfW(Addr)*>(reloc_addr);
   }
   return 0;
@@ -1386,7 +1431,8 @@ static ElfW(Addr) get_addend(ElfW(Rel)* rel, ElfW(Addr) reloc_addr) {
 #endif
 
 template<typename ElfRelIteratorT>
-bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& global_group, const soinfo_list_t& local_group) {
+bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& global_group,
+                      const soinfo_list_t& local_group) {
   for (size_t idx = 0; rel_iterator.has_next(); ++idx) {
     const auto rel = rel_iterator.next();
     if (rel == nullptr) {
@@ -1523,15 +1569,18 @@ bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& globa
         MARK(rel->r_offset);
         TRACE_TYPE(RELO, "RELO ABS32 %16llx <- %16llx %s\n",
                    reloc, (sym_addr + addend), sym_name);
-        if ((static_cast<ElfW(Addr)>(INT32_MIN) <= (*reinterpret_cast<ElfW(Addr)*>(reloc) + (sym_addr + addend))) &&
-            ((*reinterpret_cast<ElfW(Addr)*>(reloc) + (sym_addr + addend)) <= static_cast<ElfW(Addr)>(UINT32_MAX))) {
-          *reinterpret_cast<ElfW(Addr)*>(reloc) += (sym_addr + addend);
-        } else {
-          DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
-                 (*reinterpret_cast<ElfW(Addr)*>(reloc) + (sym_addr + addend)),
-                 static_cast<ElfW(Addr)>(INT32_MIN),
-                 static_cast<ElfW(Addr)>(UINT32_MAX));
-          return false;
+        {
+          const ElfW(Addr) reloc_value = *reinterpret_cast<ElfW(Addr)*>(reloc);
+          const ElfW(Addr) min_value = static_cast<ElfW(Addr)>(INT32_MIN);
+          const ElfW(Addr) max_value = static_cast<ElfW(Addr)>(UINT32_MAX);
+          if ((min_value <= (reloc_value + (sym_addr + addend))) &&
+              ((reloc_value + (sym_addr + addend)) <= max_value)) {
+            *reinterpret_cast<ElfW(Addr)*>(reloc) += (sym_addr + addend);
+          } else {
+            DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
+                   (reloc_value + (sym_addr + addend)), min_value, max_value);
+            return false;
+          }
         }
         break;
       case R_AARCH64_ABS16:
@@ -1539,15 +1588,18 @@ bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& globa
         MARK(rel->r_offset);
         TRACE_TYPE(RELO, "RELO ABS16 %16llx <- %16llx %s\n",
                    reloc, (sym_addr + addend), sym_name);
-        if ((static_cast<ElfW(Addr)>(INT16_MIN) <= (*reinterpret_cast<ElfW(Addr)*>(reloc) + (sym_addr + addend))) &&
-            ((*reinterpret_cast<ElfW(Addr)*>(reloc) + (sym_addr + addend)) <= static_cast<ElfW(Addr)>(UINT16_MAX))) {
-          *reinterpret_cast<ElfW(Addr)*>(reloc) += (sym_addr + addend);
-        } else {
-          DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
-                 (*reinterpret_cast<ElfW(Addr)*>(reloc) + (sym_addr + addend)),
-                 static_cast<ElfW(Addr)>(INT16_MIN),
-                 static_cast<ElfW(Addr)>(UINT16_MAX));
-          return false;
+        {
+          const ElfW(Addr) reloc_value = *reinterpret_cast<ElfW(Addr)*>(reloc);
+          const ElfW(Addr) min_value = static_cast<ElfW(Addr)>(INT16_MIN);
+          const ElfW(Addr) max_value = static_cast<ElfW(Addr)>(UINT16_MAX);
+          if ((min_value <= (reloc_value + (sym_addr + addend))) &&
+              ((reloc_value + (sym_addr + addend)) <= max_value)) {
+            *reinterpret_cast<ElfW(Addr)*>(reloc) += (sym_addr + addend);
+          } else {
+            DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
+                   reloc_value + (sym_addr + addend), min_value, max_value);
+            return false;
+          }
         }
         break;
       case R_AARCH64_PREL64:
@@ -1562,15 +1614,18 @@ bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& globa
         MARK(rel->r_offset);
         TRACE_TYPE(RELO, "RELO REL32 %16llx <- %16llx - %16llx %s\n",
                    reloc, (sym_addr + addend), rel->r_offset, sym_name);
-        if ((static_cast<ElfW(Addr)>(INT32_MIN) <= (*reinterpret_cast<ElfW(Addr)*>(reloc) + ((sym_addr + addend) - rel->r_offset))) &&
-            ((*reinterpret_cast<ElfW(Addr)*>(reloc) + ((sym_addr + addend) - rel->r_offset)) <= static_cast<ElfW(Addr)>(UINT32_MAX))) {
-          *reinterpret_cast<ElfW(Addr)*>(reloc) += ((sym_addr + addend) - rel->r_offset);
-        } else {
-          DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
-                 (*reinterpret_cast<ElfW(Addr)*>(reloc) + ((sym_addr + addend) - rel->r_offset)),
-                 static_cast<ElfW(Addr)>(INT32_MIN),
-                 static_cast<ElfW(Addr)>(UINT32_MAX));
-          return false;
+        {
+          const ElfW(Addr) reloc_value = *reinterpret_cast<ElfW(Addr)*>(reloc);
+          const ElfW(Addr) min_value = static_cast<ElfW(Addr)>(INT32_MIN);
+          const ElfW(Addr) max_value = static_cast<ElfW(Addr)>(UINT32_MAX);
+          if ((min_value <= (reloc_value + ((sym_addr + addend) - rel->r_offset))) &&
+              ((reloc_value + ((sym_addr + addend) - rel->r_offset)) <= max_value)) {
+            *reinterpret_cast<ElfW(Addr)*>(reloc) += ((sym_addr + addend) - rel->r_offset);
+          } else {
+            DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
+                   reloc_value + ((sym_addr + addend) - rel->r_offset), min_value, max_value);
+            return false;
+          }
         }
         break;
       case R_AARCH64_PREL16:
@@ -1578,15 +1633,18 @@ bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& globa
         MARK(rel->r_offset);
         TRACE_TYPE(RELO, "RELO REL16 %16llx <- %16llx - %16llx %s\n",
                    reloc, (sym_addr + addend), rel->r_offset, sym_name);
-        if ((static_cast<ElfW(Addr)>(INT16_MIN) <= (*reinterpret_cast<ElfW(Addr)*>(reloc) + ((sym_addr + addend) - rel->r_offset))) &&
-            ((*reinterpret_cast<ElfW(Addr)*>(reloc) + ((sym_addr + addend) - rel->r_offset)) <= static_cast<ElfW(Addr)>(UINT16_MAX))) {
-          *reinterpret_cast<ElfW(Addr)*>(reloc) += ((sym_addr + addend) - rel->r_offset);
-        } else {
-          DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
-                 (*reinterpret_cast<ElfW(Addr)*>(reloc) + ((sym_addr + addend) - rel->r_offset)),
-                 static_cast<ElfW(Addr)>(INT16_MIN),
-                 static_cast<ElfW(Addr)>(UINT16_MAX));
-          return false;
+        {
+          const ElfW(Addr) reloc_value = *reinterpret_cast<ElfW(Addr)*>(reloc);
+          const ElfW(Addr) min_value = static_cast<ElfW(Addr)>(INT16_MIN);
+          const ElfW(Addr) max_value = static_cast<ElfW(Addr)>(UINT16_MAX);
+          if ((min_value <= (reloc_value + ((sym_addr + addend) - rel->r_offset))) &&
+              ((reloc_value + ((sym_addr + addend) - rel->r_offset)) <= max_value)) {
+            *reinterpret_cast<ElfW(Addr)*>(reloc) += ((sym_addr + addend) - rel->r_offset);
+          } else {
+            DL_ERR("0x%016llx out of range 0x%016llx to 0x%016llx",
+                   reloc_value + ((sym_addr + addend) - rel->r_offset), min_value, max_value);
+            return false;
+          }
         }
         break;
 
@@ -1683,7 +1741,8 @@ bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& globa
 }
 #endif  // !defined(__mips__)
 
-void soinfo::call_array(const char* array_name __unused, linker_function_t* functions, size_t count, bool reverse) {
+void soinfo::call_array(const char* array_name __unused, linker_function_t* functions,
+                        size_t count, bool reverse) {
   if (functions == nullptr) {
     return;
   }
@@ -2056,10 +2115,12 @@ bool soinfo::prelink_image() {
         gnu_bloom_filter_ = reinterpret_cast<ElfW(Addr)*>(load_bias + d->d_un.d_ptr + 16);
         gnu_bucket_ = reinterpret_cast<uint32_t*>(gnu_bloom_filter_ + gnu_maskwords_);
         // amend chain for symndx = header[1]
-        gnu_chain_ = gnu_bucket_ + gnu_nbucket_ - reinterpret_cast<uint32_t*>(load_bias + d->d_un.d_ptr)[1];
+        gnu_chain_ = gnu_bucket_ + gnu_nbucket_ -
+            reinterpret_cast<uint32_t*>(load_bias + d->d_un.d_ptr)[1];
 
         if (!powerof2(gnu_maskwords_)) {
-          DL_ERR("invalid maskwords for gnu_hash = 0x%x, in \"%s\" expecting power to two", gnu_maskwords_, name);
+          DL_ERR("invalid maskwords for gnu_hash = 0x%x, in \"%s\" expecting power to two",
+              gnu_maskwords_, name);
           return false;
         }
         --gnu_maskwords_;
@@ -2316,7 +2377,8 @@ bool soinfo::prelink_image() {
       case DT_MIPS_RLD_MAP2:
         // Set the DT_MIPS_RLD_MAP2 entry to the address of _r_debug for GDB.
         {
-          r_debug** dp = reinterpret_cast<r_debug**>(reinterpret_cast<ElfW(Addr)>(d) + d->d_un.d_val);
+          r_debug** dp = reinterpret_cast<r_debug**>(
+              reinterpret_cast<ElfW(Addr)>(d) + d->d_un.d_val);
           *dp = &_r_debug;
         }
         break;

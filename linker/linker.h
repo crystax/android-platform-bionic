@@ -238,7 +238,8 @@ struct soinfo {
   void call_destructors();
   void call_pre_init_constructors();
   bool prelink_image();
-  bool link_image(const soinfo_list_t& global_group, const soinfo_list_t& local_group, const android_dlextinfo* extinfo);
+  bool link_image(const soinfo_list_t& global_group, const soinfo_list_t& local_group,
+                  const android_dlextinfo* extinfo);
 
   void add_child(soinfo* child);
   void remove_all_links();
@@ -289,7 +290,8 @@ struct soinfo {
   void call_array(const char* array_name, linker_function_t* functions, size_t count, bool reverse);
   void call_function(const char* function_name, linker_function_t function);
   template<typename ElfRelIteratorT>
-  bool relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& global_group, const soinfo_list_t& local_group);
+  bool relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& global_group,
+                const soinfo_list_t& local_group);
 
  private:
   // This part of the structure is only available
@@ -349,7 +351,7 @@ void do_android_update_LD_LIBRARY_PATH(const char* ld_library_path);
 soinfo* do_dlopen(const char* name, int flags, const android_dlextinfo* extinfo);
 void do_dlclose(soinfo* si);
 
-ElfW(Sym)* dlsym_linear_lookup(const char* name, soinfo** found, soinfo* start);
+ElfW(Sym)* dlsym_linear_lookup(const char* name, soinfo** found, soinfo* caller, void* handle);
 soinfo* find_containing_library(const void* addr);
 
 ElfW(Sym)* dlsym_handle_lookup(soinfo* si, soinfo** found, const char* name);
