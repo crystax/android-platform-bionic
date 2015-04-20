@@ -63,6 +63,7 @@ libc_common_src_files := \
     stdio/sprintf.c \
     stdio/stdio.c \
     stdio/stdio_ext.cpp \
+    stdlib/exit.c \
 
 # Fortify implementations of libc functions.
 libc_common_src_files += \
@@ -70,7 +71,11 @@ libc_common_src_files += \
     bionic/__fgets_chk.cpp \
     bionic/__memmove_chk.cpp \
     bionic/__poll_chk.cpp \
+    bionic/__pread64_chk.cpp \
+    bionic/__pread_chk.cpp \
     bionic/__read_chk.cpp \
+    bionic/__readlink_chk.cpp \
+    bionic/__readlinkat_chk.cpp \
     bionic/__recvfrom_chk.cpp \
     bionic/__stpcpy_chk.cpp \
     bionic/__stpncpy_chk.cpp \
@@ -480,7 +485,6 @@ libc_upstream_openbsd_ndk_src_files := \
     upstream-openbsd/lib/libc/stdlib/atoi.c \
     upstream-openbsd/lib/libc/stdlib/atol.c \
     upstream-openbsd/lib/libc/stdlib/atoll.c \
-    upstream-openbsd/lib/libc/stdlib/exit.c \
     upstream-openbsd/lib/libc/stdlib/getenv.c \
     upstream-openbsd/lib/libc/stdlib/insque.c \
     upstream-openbsd/lib/libc/stdlib/lsearch.c \
@@ -1007,7 +1011,7 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(libc_thread_atexit_impl_src_files)
-LOCAL_CFLAGS := $(libc_common_cflags) -fno-data-sections -Wframe-larger-than=2048
+LOCAL_CFLAGS := $(libc_common_cflags) -Wframe-larger-than=2048
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags) -Wold-style-cast

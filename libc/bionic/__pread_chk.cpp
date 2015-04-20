@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,12 +27,17 @@
  */
 
 #undef _FORTIFY_SOURCE
-
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
+#include "private/libc_logging.h"
 
-ssize_t readlink(const char* path, char* buf, size_t size) {
-  return readlinkat(AT_FDCWD, path, buf, size);
+extern "C" ssize_t __pread_chk(int fd, void* buf, size_t count, off_t offset, size_t buf_size) {
+  if (__predict_false(count > buf_size)) {
+    __fortify_chk_fail("pread: prevented write past end of buffer", 0);
+  }
+
+  if (__predict_false(count > SSIZE_MAX)) {
+    __fortify_chk_fail("pread: count > SSIZE_MAX", 0);
+  }
+
+  return pread(fd, buf, count, offset);
 }

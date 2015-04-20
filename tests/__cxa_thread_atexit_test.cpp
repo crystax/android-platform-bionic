@@ -35,7 +35,7 @@ class ClassWithDtor {
   std::string message;
 };
 
-thread_local ClassWithDtor class_with_dtor;
+static thread_local ClassWithDtor class_with_dtor;
 
 static void* thread_nop(void* arg) {
   class_with_dtor.set_message(*static_cast<std::string*>(arg));
@@ -48,6 +48,29 @@ TEST(thread_local, smoke) {
   ASSERT_EQ(0, pthread_create(&t, nullptr, thread_nop, &msg));
   ASSERT_EQ(0, pthread_join(t, nullptr));
   ASSERT_EQ("dtor called.", class_with_dtor_output);
+}
+
+class ClassWithDtorForMainThread {
+ public:
+  void set_message(const std::string& msg) {
+    message = msg;
+  }
+
+  ~ClassWithDtorForMainThread() {
+    fprintf(stderr, "%s", message.c_str());
+  }
+ private:
+  std::string message;
+};
+
+static void thread_atexit_main() {
+  static thread_local ClassWithDtorForMainThread class_with_dtor_for_main_thread;
+  class_with_dtor_for_main_thread.set_message("d-tor for main thread called.");
+  exit(0);
+}
+
+TEST(thread_local, dtor_for_main_thread) {
+  ASSERT_EXIT(thread_atexit_main(), testing::ExitedWithCode(0), "d-tor for main thread called.");
 }
 
 extern "C" int __cxa_thread_atexit_impl(void (*fn)(void*), void* arg, void* dso_handle);
