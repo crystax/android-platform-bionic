@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,33 +26,14 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _UCHAR_H_
-#define _UCHAR_H_
+#undef _FORTIFY_SOURCE
+#include <string.h>
+#include "private/libc_logging.h"
 
-#include <sys/cdefs.h>
-#include <wchar.h>
+extern "C" void* __memchr_chk(const void* s, int c, size_t n, size_t buf_size) {
+  if (__predict_false(n > buf_size)) {
+    __fortify_chk_fail("memchr: prevented read past end of buffer", 0);
+  }
 
-__BEGIN_DECLS
-
-#if defined(__GNUC__) && __GNUC__ >= 5 && !defined(__cplusplus)
-typedef __CHAR16_TYPE__ char16_t;
-typedef __CHAR32_TYPE__ char32_t;
-#endif
-
-#define __STD_UTF_16__ 1
-#define __STD_UTF_32__ 1
-
-size_t c16rtomb(char* __restrict, char16_t, mbstate_t* __restrict);
-size_t c32rtomb(char* __restrict, char32_t, mbstate_t* __restrict);
-size_t mbrtoc16(char16_t* __restrict,
-                const char* __restrict,
-                size_t,
-                mbstate_t* __restrict);
-size_t mbrtoc32(char32_t* __restrict,
-                const char* __restrict,
-                size_t,
-                mbstate_t* __restrict);
-
-__END_DECLS
-
-#endif /* _UCHAR_H_ */
+  return memchr(s, c, n);
+}

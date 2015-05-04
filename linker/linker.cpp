@@ -55,26 +55,11 @@
 #include "linker_block_allocator.h"
 #include "linker_debug.h"
 #include "linker_environ.h"
-#include "linker_leb128.h"
+#include "linker_sleb128.h"
 #include "linker_phdr.h"
 #include "linker_relocs.h"
 #include "linker_reloc_iterators.h"
 #include "ziparchive/zip_archive.h"
-
-/* >>> IMPORTANT NOTE - READ ME BEFORE MODIFYING <<<
- *
- * Do NOT use malloc() and friends or pthread_*() code here.
- * Don't use printf() either; it's caused mysterious memory
- * corruption in the past.
- * The linker runs before we bring up libc and it's easiest
- * to make sure it does not depend on any complex libc features
- *
- * open issues / todo:
- *
- * - cleaner error reporting
- * - after linking, set as much stuff as possible to READONLY
- *   and NOEXEC
- */
 
 // Override macros to use C++ style casts
 #undef ELF_ST_TYPE
@@ -442,7 +427,8 @@ static bool for_each_verdef(const soinfo* si, F functor) {
     offset += verdef->vd_next;
 
     if (verdef->vd_version != 1) {
-      DL_ERR("unsupported verdef[%zd] vd_version: %d (expected 1)", i, verdef->vd_version);
+      DL_ERR("unsupported verdef[%zd] vd_version: %d (expected 1) library: %s",
+          i, verdef->vd_version, si->get_soname());
       return false;
     }
 
@@ -1742,6 +1728,27 @@ bool VersionTracker::init(const soinfo* si_from) {
   return init_verneed(si_from) && init_verdef(si_from);
 }
 
+bool soinfo::lookup_version_info(const VersionTracker& version_tracker, ElfW(Word) sym,
+                                 const char* sym_name, const version_info** vi) {
+  const ElfW(Versym)* sym_ver_ptr = get_versym(sym);
+  ElfW(Versym) sym_ver = sym_ver_ptr == nullptr ? 0 : *sym_ver_ptr;
+
+  if (sym_ver != VER_NDX_LOCAL && sym_ver != VER_NDX_GLOBAL) {
+    *vi = version_tracker.get_version_info(sym_ver);
+
+    if (*vi == nullptr) {
+      DL_ERR("cannot find verneed/verdef for version index=%d "
+          "referenced by symbol \"%s\" at \"%s\"", sym_ver, sym_name, get_soname());
+      return false;
+    }
+  } else {
+    // there is no version info
+    *vi = nullptr;
+  }
+
+  return true;
+}
+
 #if !defined(__mips__)
 #if defined(USE_RELA)
 static ElfW(Addr) get_addend(ElfW(Rela)* rela, ElfW(Addr) reloc_addr __unused) {
@@ -1758,14 +1765,8 @@ static ElfW(Addr) get_addend(ElfW(Rel)* rel, ElfW(Addr) reloc_addr) {
 #endif
 
 template<typename ElfRelIteratorT>
-bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& global_group,
-                      const soinfo_list_t& local_group) {
-  VersionTracker version_tracker;
-
-  if (!version_tracker.init(this)) {
-    return false;
-  }
-
+bool soinfo::relocate(const VersionTracker& version_tracker, ElfRelIteratorT&& rel_iterator,
+                      const soinfo_list_t& global_group, const soinfo_list_t& local_group) {
   for (size_t idx = 0; rel_iterator.has_next(); ++idx) {
     const auto rel = rel_iterator.next();
     if (rel == nullptr) {
@@ -1790,27 +1791,16 @@ bool soinfo::relocate(ElfRelIteratorT&& rel_iterator, const soinfo_list_t& globa
 
     if (sym != 0) {
       sym_name = get_string(symtab_[sym].st_name);
-      const ElfW(Versym)* sym_ver_ptr = get_versym(sym);
-      ElfW(Versym) sym_ver = sym_ver_ptr == nullptr ? 0 : *sym_ver_ptr;
+      const version_info* vi = nullptr;
 
-      if (sym_ver == VER_NDX_LOCAL || sym_ver == VER_NDX_GLOBAL) {
-        // there is no version info for this one
-        if (!soinfo_do_lookup(this, sym_name, nullptr, &lsi, global_group, local_group, &s)) {
-          return false;
-        }
-      } else {
-        const version_info* vi = version_tracker.get_version_info(sym_ver);
-
-        if (vi == nullptr) {
-          DL_ERR("cannot find verneed/verdef for version index=%d "
-              "referenced by symbol \"%s\" at \"%s\"", sym_ver, sym_name, get_soname());
-          return false;
-        }
-
-        if (!soinfo_do_lookup(this, sym_name, vi, &lsi, global_group, local_group, &s)) {
-          return false;
-        }
+      if (!lookup_version_info(version_tracker, sym, sym_name, &vi)) {
+        return false;
       }
+
+      if (!soinfo_do_lookup(this, sym_name, vi, &lsi, global_group, local_group, &s)) {
+        return false;
+      }
+
       if (s == nullptr) {
         // We only allow an undefined symbol if this is a weak reference...
         s = &symtab_[sym];
@@ -2443,7 +2433,7 @@ bool soinfo::prelink_image() {
   /* We can't log anything until the linker is relocated */
   bool relocating_linker = (flags_ & FLAG_LINKER) != 0;
   if (!relocating_linker) {
-    INFO("[ linking %s ]", get_soname());
+    INFO("[ linking %s ]", get_realpath());
     DEBUG("si->base = %p si->flags = 0x%08x", reinterpret_cast<void*>(base), flags_);
   }
 
@@ -2855,6 +2845,12 @@ bool soinfo::link_image(const soinfo_list_t& global_group, const soinfo_list_t& 
     local_group_root_ = this;
   }
 
+  VersionTracker version_tracker;
+
+  if (!version_tracker.init(this)) {
+    return false;
+  }
+
 #if !defined(__LP64__)
   if (has_text_relocations) {
     // Make segments writable to allow text relocations to work properly. We will later call
@@ -2874,7 +2870,7 @@ bool soinfo::link_image(const soinfo_list_t& global_group, const soinfo_list_t& 
     if (android_relocs_size_ > 3 &&
         android_relocs_[0] == 'A' &&
         android_relocs_[1] == 'P' &&
-        (android_relocs_[2] == 'U' || android_relocs_[2] == 'S') &&
+        android_relocs_[2] == 'S' &&
         android_relocs_[3] == '2') {
       DEBUG("[ android relocating %s ]", get_soname());
 
@@ -2882,17 +2878,11 @@ bool soinfo::link_image(const soinfo_list_t& global_group, const soinfo_list_t& 
       const uint8_t* packed_relocs = android_relocs_ + 4;
       const size_t packed_relocs_size = android_relocs_size_ - 4;
 
-      if (android_relocs_[2] == 'U') {
-        relocated = relocate(
-            packed_reloc_iterator<leb128_decoder>(
-              leb128_decoder(packed_relocs, packed_relocs_size)),
-            global_group, local_group);
-      } else { // android_relocs_[2] == 'S'
-        relocated = relocate(
-            packed_reloc_iterator<sleb128_decoder>(
-              sleb128_decoder(packed_relocs, packed_relocs_size)),
-            global_group, local_group);
-      }
+      relocated = relocate(
+          version_tracker,
+          packed_reloc_iterator<sleb128_decoder>(
+            sleb128_decoder(packed_relocs, packed_relocs_size)),
+          global_group, local_group);
 
       if (!relocated) {
         return false;
@@ -2906,33 +2896,37 @@ bool soinfo::link_image(const soinfo_list_t& global_group, const soinfo_list_t& 
 #if defined(USE_RELA)
   if (rela_ != nullptr) {
     DEBUG("[ relocating %s ]", get_soname());
-    if (!relocate(plain_reloc_iterator(rela_, rela_count_), global_group, local_group)) {
+    if (!relocate(version_tracker,
+            plain_reloc_iterator(rela_, rela_count_), global_group, local_group)) {
       return false;
     }
   }
   if (plt_rela_ != nullptr) {
     DEBUG("[ relocating %s plt ]", get_soname());
-    if (!relocate(plain_reloc_iterator(plt_rela_, plt_rela_count_), global_group, local_group)) {
+    if (!relocate(version_tracker,
+            plain_reloc_iterator(plt_rela_, plt_rela_count_), global_group, local_group)) {
       return false;
     }
   }
 #else
   if (rel_ != nullptr) {
     DEBUG("[ relocating %s ]", get_soname());
-    if (!relocate(plain_reloc_iterator(rel_, rel_count_), global_group, local_group)) {
+    if (!relocate(version_tracker,
+            plain_reloc_iterator(rel_, rel_count_), global_group, local_group)) {
       return false;
     }
   }
   if (plt_rel_ != nullptr) {
     DEBUG("[ relocating %s plt ]", get_soname());
-    if (!relocate(plain_reloc_iterator(plt_rel_, plt_rel_count_), global_group, local_group)) {
+    if (!relocate(version_tracker,
+            plain_reloc_iterator(plt_rel_, plt_rel_count_), global_group, local_group)) {
       return false;
     }
   }
 #endif
 
 #if defined(__mips__)
-  if (!mips_relocate_got(global_group, local_group)) {
+  if (!mips_relocate_got(version_tracker, global_group, local_group)) {
     return false;
   }
 #endif
@@ -3043,6 +3037,8 @@ static void init_linker_info_for_gdb(ElfW(Addr) linker_base) {
   insert_soinfo_into_debug_map(linker_soinfo_for_gdb);
 }
 
+extern "C" int __system_properties_init(void);
+
 /*
  * This code is called after the linker has linked itself and
  * fixed it's own GOT. It is safe to make references to externs
@@ -3056,6 +3052,9 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
 
   // Initialize environment functions, and get to the ELF aux vectors table.
   linker_env_init(args);
+
+  // Initialize system properties
+  __system_properties_init(); // may use 'environ'
 
   // If this is a setuid/setgid program, close the security hole described in
   // ftp://ftp.freebsd.org/pub/FreeBSD/CERT/advisories/FreeBSD-SA-02:23.stdio.asc
@@ -3156,6 +3155,7 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
   for (const auto& ld_preload_name : g_ld_preload_names) {
     needed_library_name_list.push_back(ld_preload_name.c_str());
     ++needed_libraries_count;
+    ++ld_preloads_count;
   }
 
   for_each_dt_needed(si, [&](const char* name) {

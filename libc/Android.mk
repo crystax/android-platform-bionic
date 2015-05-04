@@ -63,13 +63,16 @@ libc_common_src_files := \
     stdio/sprintf.c \
     stdio/stdio.c \
     stdio/stdio_ext.cpp \
+    stdlib/atexit.c \
     stdlib/exit.c \
 
 # Fortify implementations of libc functions.
 libc_common_src_files += \
     bionic/__FD_chk.cpp \
     bionic/__fgets_chk.cpp \
+    bionic/__memchr_chk.cpp \
     bionic/__memmove_chk.cpp \
+    bionic/__memrchr_chk.cpp \
     bionic/__poll_chk.cpp \
     bionic/__pread64_chk.cpp \
     bionic/__pread_chk.cpp \
@@ -109,6 +112,7 @@ libc_bionic_ndk_src_files := \
     bionic/clock_getcpuclockid.cpp \
     bionic/clock_nanosleep.cpp \
     bionic/clone.cpp \
+    bionic/close.cpp \
     bionic/__cmsg_nxthdr.cpp \
     bionic/connect.cpp \
     bionic/ctype.cpp \
@@ -481,7 +485,6 @@ libc_upstream_openbsd_ndk_src_files := \
     upstream-openbsd/lib/libc/stdio/wprintf.c \
     upstream-openbsd/lib/libc/stdio/wscanf.c \
     upstream-openbsd/lib/libc/stdio/wsetup.c \
-    upstream-openbsd/lib/libc/stdlib/atexit.c \
     upstream-openbsd/lib/libc/stdlib/atoi.c \
     upstream-openbsd/lib/libc/stdlib/atol.c \
     upstream-openbsd/lib/libc/stdlib/atoll.c \
@@ -824,12 +827,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(libc_upstream_openbsd_ndk_src_files)
-ifneq (,$(filter $(TARGET_ARCH),x86 x86_64))
-  # Clang has wrong long double size or LDBL_MANT_DIG, http://b/17163651.
-  LOCAL_CLANG := false
-else
-  LOCAL_CLANG := $(use_clang)
-endif
+LOCAL_CLANG := $(use_clang)
 
 LOCAL_CFLAGS := \
     $(libc_common_cflags) \
@@ -867,12 +865,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(libc_upstream_openbsd_src_files)
-ifneq (,$(filter $(TARGET_ARCH),x86 x86_64))
-  # Clang has wrong long double size or LDBL_MANT_DIG, http://b/17163651.
-  LOCAL_CLANG := false
-else
-  LOCAL_CLANG := $(use_clang)
-endif
+LOCAL_CLANG := $(use_clang)
 
 LOCAL_CFLAGS := \
     $(libc_common_cflags) \
@@ -912,12 +905,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES_32 := $(libc_upstream_openbsd_gdtoa_src_files_32)
 LOCAL_SRC_FILES_64 := $(libc_upstream_openbsd_gdtoa_src_files_64)
-ifneq (,$(filter $(TARGET_ARCH),x86 x86_64))
-  # Clang has wrong long double size or LDBL_MANT_DIG, http://b/17163651.
-  LOCAL_CLANG := false
-else
-  LOCAL_CLANG := $(use_clang)
-endif
+LOCAL_CLANG := $(use_clang)
 
 LOCAL_CFLAGS := \
     $(libc_common_cflags) \
@@ -953,9 +941,6 @@ LOCAL_SRC_FILES := $(libc_bionic_src_files)
 LOCAL_CFLAGS := $(libc_common_cflags) \
     -Wframe-larger-than=2048 \
 
-# ssse3-strcmp-slm.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_x86_64 += -no-integrated-as
-
 # memcpy.S, memchr.S, etc. do not compile with Clang.
 LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
 LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
@@ -986,9 +971,6 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(libc_bionic_ndk_src_files)
 LOCAL_CFLAGS := $(libc_common_cflags) \
     -Wframe-larger-than=2048 \
-
-# ssse3-strcmp-slm.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_x86_64 += -no-integrated-as
 
 # memcpy.S, memchr.S, etc. do not compile with Clang.
 LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
@@ -1041,9 +1023,6 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(libc_pthread_src_files)
 LOCAL_CFLAGS := $(libc_common_cflags) \
     -Wframe-larger-than=2048 \
-
-# ssse3-strcmp-slm.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_x86_64 += -no-integrated-as
 
 # memcpy.S, memchr.S, etc. do not compile with Clang.
 LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
@@ -1236,10 +1215,6 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 
 LOCAL_WHOLE_STATIC_LIBRARIES_arm := libc_aeabi
 
-ifneq ($(MALLOC_IMPL),dlmalloc)
-LOCAL_WHOLE_STATIC_LIBRARIES += libjemalloc
-endif
-
 LOCAL_CXX_STL := none
 LOCAL_SYSTEM_SHARED_LIBRARIES :=
 
@@ -1332,6 +1307,11 @@ LOCAL_MODULE := libc
 LOCAL_CLANG := $(use_clang)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(libc_common_additional_dependencies)
 LOCAL_WHOLE_STATIC_LIBRARIES := libc_common
+
+ifneq ($(MALLOC_IMPL),dlmalloc)
+LOCAL_WHOLE_STATIC_LIBRARIES += libjemalloc
+endif
+
 LOCAL_CXX_STL := none
 LOCAL_SYSTEM_SHARED_LIBRARIES :=
 LOCAL_ADDRESS_SANITIZER := false
@@ -1353,10 +1333,13 @@ LOCAL_CPPFLAGS := $(libc_common_cppflags)
 
 LOCAL_C_INCLUDES := $(libc_common_c_includes)
 LOCAL_SRC_FILES := \
+    arch-common/bionic/crtbegin_so.c \
+    arch-common/bionic/crtbrand.S \
     $(libc_arch_dynamic_src_files) \
     bionic/malloc_debug_common.cpp \
     bionic/libc_init_dynamic.cpp \
     bionic/NetdClient.cpp \
+    arch-common/bionic/crtend_so.S \
 
 LOCAL_MODULE := libc
 LOCAL_CLANG := $(use_clang)
@@ -1369,6 +1352,9 @@ LOCAL_ADDITIONAL_DEPENDENCIES := \
 # meaningful name resolution.
 LOCAL_STRIP_MODULE := keep_symbols
 
+# Do not pack libc.so relocations; see http://b/20645321 for details.
+LOCAL_PACK_MODULE_RELOCATIONS := false
+
 # WARNING: The only library libc.so should depend on is libdl.so!  If you add other libraries,
 # make sure to add -Wl,--exclude-libs=libgcc.a to the LOCAL_LDFLAGS for those libraries.  This
 # ensures that symbols that are pulled into those new libraries from libgcc.a are not declared
@@ -1379,6 +1365,11 @@ LOCAL_STRIP_MODULE := keep_symbols
 
 LOCAL_SHARED_LIBRARIES := libdl
 LOCAL_WHOLE_STATIC_LIBRARIES := libc_common
+
+ifneq ($(MALLOC_IMPL),dlmalloc)
+LOCAL_WHOLE_STATIC_LIBRARIES += libjemalloc
+endif
+
 LOCAL_CXX_STL := none
 LOCAL_SYSTEM_SHARED_LIBRARIES :=
 
@@ -1396,15 +1387,15 @@ LOCAL_LDFLAGS_arm := -Wl,--hash-style=sysv
 
 $(eval $(call patch-up-arch-specific-flags,LOCAL_CFLAGS,libc_common_cflags))
 $(eval $(call patch-up-arch-specific-flags,LOCAL_SRC_FILES,libc_arch_dynamic_src_files))
+
+LOCAL_NO_CRT := true
+LOCAL_ASFLAGS += $(libc_crt_target_cflags)
+
 # special for arm
-LOCAL_NO_CRT_arm := true
 LOCAL_CFLAGS_arm += -DCRT_LEGACY_WORKAROUND
-LOCAL_ASFLAGS_arm += $(libc_crt_target_cflags)
 LOCAL_SRC_FILES_arm += \
-    arch-common/bionic/crtbegin_so.c \
-    arch-common/bionic/crtbrand.S \
-    arch-arm/bionic/atexit_legacy.c \
-    arch-common/bionic/crtend_so.S
+    arch-arm/bionic/atexit_legacy.c
+
 LOCAL_ADDRESS_SANITIZER := false
 LOCAL_NATIVE_COVERAGE := $(bionic_coverage)
 
