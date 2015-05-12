@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include <dlfcn.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -457,42 +456,6 @@ TEST(pthread, pthread_detach__no_such_thread) {
   MakeDeadThread(dead_thread);
 
   ASSERT_EQ(ESRCH, pthread_detach(dead_thread));
-}
-
-TEST(pthread, pthread_detach_no_leak) {
-  size_t initial_bytes = 0;
-  // Run this loop more than once since the first loop causes some memory
-  // to be allocated permenantly. Run an extra loop to help catch any subtle
-  // memory leaks.
-  for (size_t loop = 0; loop < 3; loop++) {
-    // Set the initial bytes on the second loop since the memory in use
-    // should have stabilized.
-    if (loop == 1) {
-      initial_bytes = mallinfo().uordblks;
-    }
-
-    pthread_attr_t attr;
-    ASSERT_EQ(0, pthread_attr_init(&attr));
-    ASSERT_EQ(0, pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE));
-
-    std::vector<pthread_t> threads;
-    for (size_t i = 0; i < 32; ++i) {
-      pthread_t t;
-      ASSERT_EQ(0, pthread_create(&t, &attr, IdFn, NULL));
-      threads.push_back(t);
-    }
-
-    sleep(1);
-
-    for (size_t i = 0; i < 32; ++i) {
-      ASSERT_EQ(0, pthread_detach(threads[i])) << i;
-    }
-  }
-
-  size_t final_bytes = mallinfo().uordblks;
-  int leaked_bytes = (final_bytes - initial_bytes);
-
-  ASSERT_EQ(0, leaked_bytes);
 }
 
 TEST(pthread, pthread_getcpuclockid__clock_gettime) {
@@ -1016,62 +979,6 @@ TEST(pthread, pthread_atfork_smoke) {
   // Prepare calls are made in the reverse order.
   ASSERT_EQ(21, g_atfork_prepare_calls);
   int status;
-  ASSERT_EQ(pid, waitpid(pid, &status, 0));
-}
-
-static void AtForkPrepare3() { g_atfork_prepare_calls = (g_atfork_prepare_calls * 10) + 3; }
-static void AtForkPrepare4() { g_atfork_prepare_calls = (g_atfork_prepare_calls * 10) + 4; }
-
-static void AtForkParent3() { g_atfork_parent_calls = (g_atfork_parent_calls * 10) + 3; }
-static void AtForkParent4() { g_atfork_parent_calls = (g_atfork_parent_calls * 10) + 4; }
-
-static void AtForkChild3() { g_atfork_child_calls = (g_atfork_child_calls * 10) + 3; }
-static void AtForkChild4() { g_atfork_child_calls = (g_atfork_child_calls * 10) + 4; }
-
-TEST(pthread, pthread_atfork_with_dlclose) {
-  ASSERT_EQ(0, pthread_atfork(AtForkPrepare1, AtForkParent1, AtForkChild1));
-
-  void* handle = dlopen("libtest_pthread_atfork.so", RTLD_NOW | RTLD_LOCAL);
-  ASSERT_TRUE(handle != nullptr) << dlerror();
-  typedef int (*fn_t)(void (*)(void), void (*)(void), void (*)(void));
-  fn_t fn = reinterpret_cast<fn_t>(dlsym(handle, "proxy_pthread_atfork"));
-  ASSERT_TRUE(fn != nullptr) << dlerror();
-  // the library registers 2 additional atfork handlers in a constructor
-  ASSERT_EQ(0, fn(AtForkPrepare2, AtForkParent2, AtForkChild2));
-  ASSERT_EQ(0, fn(AtForkPrepare3, AtForkParent3, AtForkChild3));
-
-  ASSERT_EQ(0, pthread_atfork(AtForkPrepare4, AtForkParent4, AtForkChild4));
-
-  int pid = fork();
-
-  ASSERT_NE(-1, pid) << strerror(errno);
-
-  if (pid == 0) {
-    ASSERT_EQ(1234, g_atfork_child_calls);
-    _exit(0);
-  }
-
-  ASSERT_EQ(1234, g_atfork_parent_calls);
-  ASSERT_EQ(4321, g_atfork_prepare_calls);
-
-  EXPECT_EQ(0, dlclose(handle));
-  g_atfork_prepare_calls = g_atfork_parent_calls = g_atfork_child_calls = 0;
-
-  int status;
-  ASSERT_EQ(pid, waitpid(pid, &status, 0));
-
-  pid = fork();
-
-  ASSERT_NE(-1, pid) << strerror(errno);
-
-  if (pid == 0) {
-    ASSERT_EQ(14, g_atfork_child_calls);
-    _exit(0);
-  }
-
-  ASSERT_EQ(14, g_atfork_parent_calls);
-  ASSERT_EQ(41, g_atfork_prepare_calls);
-
   ASSERT_EQ(pid, waitpid(pid, &status, 0));
 }
 

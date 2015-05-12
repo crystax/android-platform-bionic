@@ -941,10 +941,6 @@ LOCAL_SRC_FILES := $(libc_bionic_src_files)
 LOCAL_CFLAGS := $(libc_common_cflags) \
     -Wframe-larger-than=2048 \
 
-# memcpy.S, memchr.S, etc. do not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
-LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
-
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags) -Wold-style-cast
 LOCAL_C_INCLUDES := $(libc_common_c_includes) bionic/libstdc++/include
@@ -971,10 +967,6 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(libc_bionic_ndk_src_files)
 LOCAL_CFLAGS := $(libc_common_cflags) \
     -Wframe-larger-than=2048 \
-
-# memcpy.S, memchr.S, etc. do not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
-LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags) -Wold-style-cast
@@ -1023,10 +1015,6 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(libc_pthread_src_files)
 LOCAL_CFLAGS := $(libc_common_cflags) \
     -Wframe-larger-than=2048 \
-
-# memcpy.S, memchr.S, etc. do not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
-LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
 
 LOCAL_CONLYFLAGS := $(libc_common_conlyflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags) -Wold-style-cast
@@ -1379,11 +1367,10 @@ LOCAL_LDFLAGS := -Wl,--version-script,$(LOCAL_PATH)/version_script.txt
 # We'd really like to do this for all architectures, but since this wasn't done
 # before, these symbols must continue to be exported on LP32 for binary
 # compatibility.
-# TODO: disabled for http://b/20065774.
-#LOCAL_LDFLAGS_64 := -Wl,--exclude-libs,libgcc.a
+LOCAL_LDFLAGS_64 := -Wl,--exclude-libs,libgcc.a
 
 # TODO: This is to work around b/19059885. Remove after root cause is fixed
-LOCAL_LDFLAGS_arm := -Wl,--hash-style=sysv
+LOCAL_LDFLAGS_arm := -Wl,--hash-style=both
 
 $(eval $(call patch-up-arch-specific-flags,LOCAL_CFLAGS,libc_common_cflags))
 $(eval $(call patch-up-arch-specific-flags,LOCAL_SRC_FILES,libc_arch_dynamic_src_files))
@@ -1513,7 +1500,7 @@ LOCAL_CFLAGS := $(libc_common_cflags)
 LOCAL_CPPFLAGS := $(libc_common_cppflags)
 
 # TODO: This is to work around b/19059885. Remove after root cause is fixed
-LOCAL_LDFLAGS_arm := -Wl,--hash-style=sysv
+LOCAL_LDFLAGS_arm := -Wl,--hash-style=both
 
 LOCAL_SRC_FILES := $(libstdcxx_common_src_files)
 LOCAL_MODULE:= libstdc++
