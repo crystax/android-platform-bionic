@@ -47,7 +47,6 @@
 #include "private/bionic_tls.h"
 #include "private/KernelArgumentBlock.h"
 #include "private/ScopedPthreadMutexLocker.h"
-#include "private/ScopedFd.h"
 #include "private/ScopeGuard.h"
 #include "private/UniquePtr.h"
 
@@ -918,13 +917,17 @@ static bool walk_dependencies_tree(soinfo* root_soinfos[], size_t root_soinfos_s
 }
 
 
-// This is used by dlsym(3).  It performs symbol lookup only within the
-// specified soinfo object and its dependencies in breadth first order.
-const ElfW(Sym)* dlsym_handle_lookup(soinfo* si, soinfo** found, const char* name) {
+static const ElfW(Sym)* dlsym_handle_lookup(soinfo* root, soinfo* skip_until,
+                                            soinfo** found, SymbolName& symbol_name) {
   const ElfW(Sym)* result = nullptr;
-  SymbolName symbol_name(name);
+  bool skip_lookup = skip_until != nullptr;
 
-  walk_dependencies_tree(&si, 1, [&](soinfo* current_soinfo) {
+  walk_dependencies_tree(&root, 1, [&](soinfo* current_soinfo) {
+    if (skip_lookup) {
+      skip_lookup = current_soinfo != skip_until;
+      return true;
+    }
+
     if (!current_soinfo->find_symbol_by_name(symbol_name, nullptr, &result)) {
       result = nullptr;
       return false;
@@ -939,6 +942,13 @@ const ElfW(Sym)* dlsym_handle_lookup(soinfo* si, soinfo** found, const char* nam
   });
 
   return result;
+}
+
+// This is used by dlsym(3).  It performs symbol lookup only within the
+// specified soinfo object and its dependencies in breadth first order.
+const ElfW(Sym)* dlsym_handle_lookup(soinfo* si, soinfo** found, const char* name) {
+  SymbolName symbol_name(name);
+  return dlsym_handle_lookup(si, nullptr, found, symbol_name);
 }
 
 /* This is used by dlsym(3) to performs a global symbol lookup. If the
@@ -978,31 +988,13 @@ const ElfW(Sym)* dlsym_linear_lookup(const char* name,
     }
   }
 
-  // If not found - look into local_group unless
-  // caller is part of the global group in which
+  // If not found - use dlsym_handle_lookup for caller's
+  // local_group unless it is part of the global group in which
   // case we already did it.
   if (s == nullptr && caller != nullptr &&
       (caller->get_rtld_flags() & RTLD_GLOBAL) == 0) {
-    soinfo* local_group_root = caller->get_local_group_root();
-
-    if (handle == RTLD_DEFAULT) {
-      start = local_group_root;
-    }
-
-    for (soinfo* si = start; si != nullptr; si = si->next) {
-      if (si->get_local_group_root() != local_group_root) {
-        break;
-      }
-
-      if (!si->find_symbol_by_name(symbol_name, nullptr, &s)) {
-        return nullptr;
-      }
-
-      if (s != nullptr) {
-        *found = si;
-        break;
-      }
-    }
+    return dlsym_handle_lookup(caller->get_local_group_root(),
+        (handle == RTLD_NEXT) ? caller : nullptr, found, symbol_name);
   }
 
   if (s != nullptr) {
@@ -1217,29 +1209,10 @@ static void for_each_dt_needed(const soinfo* si, F action) {
   }
 }
 
-static soinfo* load_library(LoadTaskList& load_tasks,
+static soinfo* load_library(int fd, off64_t file_offset,
+                            LoadTaskList& load_tasks,
                             const char* name, int rtld_flags,
                             const android_dlextinfo* extinfo) {
-  int fd = -1;
-  off64_t file_offset = 0;
-  ScopedFd file_guard(-1);
-
-  if (extinfo != nullptr && (extinfo->flags & ANDROID_DLEXT_USE_LIBRARY_FD) != 0) {
-    fd = extinfo->library_fd;
-    if ((extinfo->flags & ANDROID_DLEXT_USE_LIBRARY_FD_OFFSET) != 0) {
-      file_offset = extinfo->library_fd_offset;
-    }
-  } else {
-    // Open the file.
-    fd = open_library(name, &file_offset);
-    if (fd == -1) {
-      DL_ERR("library \"%s\" not found", name);
-      return nullptr;
-    }
-
-    file_guard.reset(fd);
-  }
-
   if ((file_offset % PAGE_SIZE) != 0) {
     DL_ERR("file offset for the library \"%s\" is not page-aligned: %" PRId64, name, file_offset);
     return nullptr;
@@ -1313,6 +1286,29 @@ static soinfo* load_library(LoadTaskList& load_tasks,
   });
 
   return si;
+}
+
+static soinfo* load_library(LoadTaskList& load_tasks,
+                            const char* name, int rtld_flags,
+                            const android_dlextinfo* extinfo) {
+  if (extinfo != nullptr && (extinfo->flags & ANDROID_DLEXT_USE_LIBRARY_FD) != 0) {
+    off64_t file_offset = 0;
+    if ((extinfo->flags & ANDROID_DLEXT_USE_LIBRARY_FD_OFFSET) != 0) {
+      file_offset = extinfo->library_fd_offset;
+    }
+    return load_library(extinfo->library_fd, file_offset, load_tasks, name, rtld_flags, extinfo);
+  }
+
+  // Open the file.
+  off64_t file_offset;
+  int fd = open_library(name, &file_offset);
+  if (fd == -1) {
+    DL_ERR("library \"%s\" not found", name);
+    return nullptr;
+  }
+  soinfo* result = load_library(fd, file_offset, load_tasks, name, rtld_flags, extinfo);
+  close(fd);
+  return result;
 }
 
 static soinfo *find_loaded_library_by_soname(const char* name) {
@@ -1533,7 +1529,7 @@ static void soinfo_unload(soinfo* root) {
           }
         }
       } else {
-#if !defined(__arm__)
+#if !defined(__work_around_b_19059885__)
         __libc_fatal("soinfo for \"%s\"@%p has no version", si->get_realpath(), si);
 #else
         PRINT("warning: soinfo for \"%s\"@%p has no version", si->get_realpath(), si);
@@ -2259,7 +2255,7 @@ void soinfo::set_dt_flags_1(uint32_t dt_flags_1) {
 }
 
 const char* soinfo::get_realpath() const {
-#if defined(__arm__)
+#if defined(__work_around_b_19059885__)
   if (has_min_version(2)) {
     return realpath_.c_str();
   } else {
@@ -2271,7 +2267,7 @@ const char* soinfo::get_realpath() const {
 }
 
 const char* soinfo::get_soname() const {
-#if defined(__arm__)
+#if defined(__work_around_b_19059885__)
   if (has_min_version(2)) {
     return soname_;
   } else {
@@ -2418,8 +2414,7 @@ static int nullify_closed_stdio() {
   /* If /dev/null is not one of the stdio file descriptors, close it. */
   if (dev_null > 2) {
     TRACE("[ Closing /dev/null file-descriptor=%d]", dev_null);
-    status = TEMP_FAILURE_RETRY(close(dev_null));
-    if (status == -1) {
+    if (close(dev_null) == -1) {
       DL_ERR("close failed: %s", strerror(errno));
       return_value = -1;
     }
@@ -2809,7 +2804,7 @@ bool soinfo::prelink_image() {
   for (ElfW(Dyn)* d = dynamic; d->d_tag != DT_NULL; ++d) {
     if (d->d_tag == DT_SONAME) {
       soname_ = get_string(d->d_un.d_val);
-#if defined(__arm__)
+#if defined(__work_around_b_19059885__)
       strlcpy(old_name_, soname_, sizeof(old_name_));
 #endif
       break;
