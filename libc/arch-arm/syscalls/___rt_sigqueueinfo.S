@@ -2,13 +2,14 @@
 
 #include <private/bionic_asm.h>
 
-ENTRY(ftruncate)
+ENTRY(___rt_sigqueueinfo)
     mov     ip, r7
-    ldr     r7, =__NR_ftruncate
+    ldr     r7, =__NR_rt_sigqueueinfo
     swi     #0
     mov     r7, ip
     cmn     r0, #(MAX_ERRNO + 1)
     bxls    lr
     neg     r0, r0
     b       __set_errno_internal
-END(ftruncate)
+END(___rt_sigqueueinfo)
+.hidden ___rt_sigqueueinfo
