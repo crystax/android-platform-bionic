@@ -316,6 +316,7 @@ static bool realpath_fd(int fd, std::string* realpath) {
   std::vector<char> buf(PATH_MAX), proc_self_fd(PATH_MAX);
   snprintf(&proc_self_fd[0], proc_self_fd.size(), "/proc/self/fd/%d", fd);
   if (readlink(&proc_self_fd[0], &buf[0], buf.size()) == -1) {
+    PRINT("readlink('%s') failed: %s [fd=%d]", &proc_self_fd[0], strerror(errno), fd);
     return false;
   }
 
@@ -1200,11 +1201,27 @@ static int open_library(const char* name, off64_t* file_offset) {
   return fd;
 }
 
+static const char* fix_dt_needed(const char* dt_needed, const char* sopath __unused) {
+#if !defined(__LP64__)
+  // Work around incorrect DT_NEEDED entries for old apps: http://b/21364029
+  uint32_t target_sdk_version = get_application_target_sdk_version();
+  if (target_sdk_version != 0 && target_sdk_version <= 22) {
+    const char* bname = basename(dt_needed);
+    if (bname != dt_needed) {
+      DL_WARN("'%s' library has invalid DT_NEEDED entry '%s'", sopath, dt_needed);
+    }
+
+    return bname;
+  }
+#endif
+  return dt_needed;
+}
+
 template<typename F>
 static void for_each_dt_needed(const soinfo* si, F action) {
   for (ElfW(Dyn)* d = si->dynamic; d->d_tag != DT_NULL; ++d) {
     if (d->d_tag == DT_NEEDED) {
-      action(si->get_string(d->d_un.d_val));
+      action(fix_dt_needed(si->get_string(d->d_un.d_val), si->get_realpath()));
     }
   }
 }
@@ -1256,7 +1273,7 @@ static soinfo* load_library(int fd, off64_t file_offset,
 
   std::string realpath = name;
   if (!realpath_fd(fd, &realpath)) {
-    PRINT("cannot resolve realpath for the library \"%s\": %s", name, strerror(errno));
+    PRINT("warning: unable to get realpath for the library \"%s\". Will use given name.", name);
     realpath = name;
   }
 
@@ -2730,7 +2747,7 @@ bool soinfo::prelink_image() {
         set_dt_flags_1(d->d_un.d_val);
 
         if ((d->d_un.d_val & ~SUPPORTED_DT_FLAGS_1) != 0) {
-          DL_WARN("Unsupported flags DT_FLAGS_1=%p", reinterpret_cast<void*>(d->d_un.d_val));
+          DL_WARN("%s: unsupported flags DT_FLAGS_1=%p", get_realpath(), reinterpret_cast<void*>(d->d_un.d_val));
         }
         break;
 #if defined(__mips__)
