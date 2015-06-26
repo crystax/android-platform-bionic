@@ -2,8 +2,8 @@
 
 #include <private/bionic_asm.h>
 
-ENTRY(flistxattr)
-    mov     x8, __NR_flistxattr
+ENTRY(___clock_nanosleep)
+    mov     x8, __NR_clock_nanosleep
     svc     #0
 
     cmn     x0, #(MAX_ERRNO + 1)
@@ -11,4 +11,5 @@ ENTRY(flistxattr)
     b.hi    __set_errno_internal
 
     ret
-END(flistxattr)
+END(___clock_nanosleep)
+.hidden ___clock_nanosleep

@@ -15,11 +15,16 @@
  */
 
 #include "linker.h"
+#include <android/api-level.h>
 #include <atomic>
 
-static std::atomic<uint32_t> g_target_sdk_version;
+static std::atomic<uint32_t> g_target_sdk_version(__ANDROID_API__);
 
 void set_application_target_sdk_version(uint32_t target) {
+  // translate current sdk_version to platform sdk_version
+  if (target == 0) {
+    target = __ANDROID_API__;
+  }
   g_target_sdk_version = target;
 }
 

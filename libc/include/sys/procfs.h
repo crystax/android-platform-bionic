@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2014 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,20 +25,30 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <string.h>
-#include <stdint.h>
 
-void*  memset(void*  dst, int c, size_t n)
-{
-    char*  q   = dst;
-    char*  end = q + n;
+#ifndef _SYS_PROCFS_H_
+#define _SYS_PROCFS_H_
 
-    for (;;) {
-        if (q >= end) break; *q++ = (char) c;
-        if (q >= end) break; *q++ = (char) c;
-        if (q >= end) break; *q++ = (char) c;
-        if (q >= end) break; *q++ = (char) c;
-    }
+#include <sys/cdefs.h>
+#include <sys/ucontext.h>
 
-  return dst;
-}
+__BEGIN_DECLS
+
+typedef unsigned long elf_greg_t;
+typedef elf_greg_t elf_gregset_t[NGREG];
+
+typedef fpregset_t elf_fpregset_t;
+
+#if defined(__i386__)
+typedef struct user_fpxregs_struct elf_fpxregset_t;
+#endif
+
+typedef elf_gregset_t prgregset_t;
+typedef elf_fpregset_t prfpregset_t;
+
+typedef pid_t lwpid_t;
+typedef void* psaddr_t;
+
+__END_DECLS
+
+#endif /* _SYS_PROCFS_H_ */

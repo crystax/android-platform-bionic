@@ -49,9 +49,6 @@ endif
 test_cppflags = \
     -std=gnu++11 \
 
-libBionicStandardTests_src_files_target := \
-    libdl_test.cpp \
-
 libBionicStandardTests_src_files := \
     arpa_inet_test.cpp \
     buffer_tests.cpp \
@@ -96,6 +93,7 @@ libBionicStandardTests_src_files := \
     sys_epoll_test.cpp \
     sys_mman_test.cpp \
     sys_personality_test.cpp \
+    sys_procfs_test.cpp \
     sys_resource_test.cpp \
     sys_select_test.cpp \
     sys_sendfile_test.cpp \
@@ -106,6 +104,7 @@ libBionicStandardTests_src_files := \
     sys_sysinfo_test.cpp \
     sys_time_test.cpp \
     sys_types_test.cpp \
+    sys_uio_test.cpp \
     sys_vfs_test.cpp \
     sys_xattr_test.cpp \
     system_properties_test.cpp \
@@ -137,6 +136,11 @@ libBionicStandardTests_static_libraries := \
 
 libBionicStandardTests_ldlibs_host := \
     -lrt \
+
+# Clang/llvm has incompatible long double (fp128) for x86_64.
+# https://llvm.org/bugs/show_bug.cgi?id=23897
+# This affects most of math_test.cpp.
+libBionicStandardTests_clang_target := false
 
 module := libBionicStandardTests
 module_tag := optional
@@ -273,6 +277,7 @@ bionic-unit-tests_src_files := \
     dlext_test.cpp \
     __cxa_thread_atexit_test.cpp \
     dlfcn_test.cpp \
+    libdl_test.cpp \
     pthread_dlfcn_test.cpp \
 
 bionic-unit-tests_cflags := $(test_cflags)

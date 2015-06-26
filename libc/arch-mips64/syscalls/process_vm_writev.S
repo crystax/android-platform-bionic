@@ -2,10 +2,10 @@
 
 #include <private/bionic_asm.h>
 
-ENTRY(flistxattr)
+ENTRY(process_vm_writev)
     .set push
     .set noreorder
-    li v0, __NR_flistxattr
+    li v0, __NR_process_vm_writev
     syscall
     bnez a3, 1f
     move a0, v0
@@ -22,4 +22,4 @@ ENTRY(flistxattr)
     j t9
     move ra, t0
     .set pop
-END(flistxattr)
+END(process_vm_writev)

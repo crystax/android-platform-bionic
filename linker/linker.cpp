@@ -26,6 +26,7 @@
  * SUCH DAMAGE.
  */
 
+#include <android/api-level.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -53,14 +54,15 @@
 #include "linker.h"
 #include "linker_block_allocator.h"
 #include "linker_debug.h"
-#include "linker_environ.h"
 #include "linker_sleb128.h"
 #include "linker_phdr.h"
 #include "linker_relocs.h"
 #include "linker_reloc_iterators.h"
 #include "ziparchive/zip_archive.h"
 
-// Override macros to use C++ style casts
+extern void __libc_init_AT_SECURE(KernelArgumentBlock&);
+
+// Override macros to use C++ style casts.
 #undef ELF_ST_TYPE
 #define ELF_ST_TYPE(x) (static_cast<uint32_t>(x) & 0xf)
 
@@ -95,6 +97,14 @@ static std::vector<soinfo*> g_ld_preloads;
 __LIBC_HIDDEN__ int g_ld_debug_verbosity;
 
 __LIBC_HIDDEN__ abort_msg_t* g_abort_message = nullptr; // For debuggerd.
+
+static std::string dirname(const char *path) {
+  const char* last_slash = strrchr(path, '/');
+  if (last_slash == path) return "/";
+  else if (last_slash == nullptr) return ".";
+  else
+    return std::string(path, last_slash - path);
+}
 
 #if STATS
 struct linker_stats_t {
@@ -305,6 +315,38 @@ static void parse_path(const char* path, const char* delimiters,
 
 static void parse_LD_LIBRARY_PATH(const char* path) {
   parse_path(path, ":", &g_ld_library_paths);
+}
+
+void soinfo::set_dt_runpath(const char* path) {
+  if (!has_min_version(2)) return;
+  parse_path(path, ":", &dt_runpath_);
+
+  std::string origin = dirname(get_realpath());
+  // FIXME: add $LIB and $PLATFORM.
+  std::pair<std::string, std::string> substs[] = {{"ORIGIN", origin}};
+  for (std::string& s : dt_runpath_) {
+    size_t pos = 0;
+    while (pos < s.size()) {
+      pos = s.find("$", pos);
+      if (pos == std::string::npos) break;
+      for (const auto& subst : substs) {
+        const std::string& token = subst.first;
+        const std::string& replacement = subst.second;
+        if (s.substr(pos + 1, token.size()) == token) {
+          s.replace(pos, token.size() + 1, replacement);
+          // -1 to compensate for the ++pos below.
+          pos += replacement.size() - 1;
+          break;
+        } else if (s.substr(pos + 1, token.size() + 2) == "{" + token + "}") {
+          s.replace(pos, token.size() + 3, replacement);
+          pos += replacement.size() - 1;
+          break;
+        }
+      }
+      // Skip $ in case it did not match any of the known substitutions.
+      ++pos;
+    }
+  }
 }
 
 static void parse_LD_PRELOAD(const char* path) {
@@ -986,7 +1028,10 @@ const ElfW(Sym)* dlsym_linear_lookup(const char* name,
 
   const ElfW(Sym)* s = nullptr;
   for (soinfo* si = start; si != nullptr; si = si->next) {
-    if ((si->get_rtld_flags() & RTLD_GLOBAL) == 0) {
+    // Do not skip RTLD_LOCAL libraries in dlsym(RTLD_DEFAULT, ...)
+    // if the library is opened by application with target api level <= 22
+    // See http://b/21565766
+    if ((si->get_rtld_flags() & RTLD_GLOBAL) == 0 && si->get_target_sdk_version() > 22) {
       continue;
     }
 
@@ -1077,11 +1122,11 @@ static int open_library_in_zipfile(const char* const path,
                                    off64_t* file_offset) {
   TRACE("Trying zip file open from path '%s'", path);
 
-  // Treat an '!' character inside a path as the separator between the name
+  // Treat an '!/' separator inside a path as the separator between the name
   // of the zip file on disk and the subdirectory to search within it.
-  // For example, if path is "foo.zip!bar/bas/x.so", then we search for
+  // For example, if path is "foo.zip!/bar/bas/x.so", then we search for
   // "bar/bas/x.so" within "foo.zip".
-  const char* separator = strchr(path, '!');
+  const char* separator = strstr(path, "!/");
   if (separator == nullptr) {
     return -1;
   }
@@ -1095,7 +1140,7 @@ static int open_library_in_zipfile(const char* const path,
   buf[separator - path] = '\0';
 
   const char* zip_path = buf;
-  const char* file_path = &buf[separator - path + 1];
+  const char* file_path = &buf[separator - path + 2];
   int fd = TEMP_FAILURE_RETRY(open(zip_path, O_RDONLY | O_CLOEXEC));
   if (fd == -1) {
     return -1;
@@ -1157,8 +1202,9 @@ static int open_library_on_default_path(const char* name, off64_t* file_offset) 
   return -1;
 }
 
-static int open_library_on_ld_library_path(const char* name, off64_t* file_offset) {
-  for (const auto& path_str : g_ld_library_paths) {
+static int open_library_on_paths(const char* name, off64_t* file_offset,
+                                 const std::vector<std::string>& paths) {
+  for (const auto& path_str : paths) {
     char buf[512];
     const char* const path = path_str.c_str();
     if (!format_path(buf, sizeof(buf), path, name)) {
@@ -1185,7 +1231,7 @@ static int open_library_on_ld_library_path(const char* name, off64_t* file_offse
   return -1;
 }
 
-static int open_library(const char* name, off64_t* file_offset) {
+static int open_library(const char* name, soinfo *needed_by, off64_t* file_offset) {
   TRACE("[ opening %s ]", name);
 
   // If the name contains a slash, we should attempt to open it directly and not search the paths.
@@ -1205,7 +1251,10 @@ static int open_library(const char* name, off64_t* file_offset) {
   }
 
   // Otherwise we try LD_LIBRARY_PATH first, and fall back to the built-in well known paths.
-  int fd = open_library_on_ld_library_path(name, file_offset);
+  int fd = open_library_on_paths(name, file_offset, g_ld_library_paths);
+  if (fd == -1 && needed_by) {
+    fd = open_library_on_paths(name, file_offset, needed_by->get_dt_runpath());
+  }
   if (fd == -1) {
     fd = open_library_on_default_path(name, file_offset);
   }
@@ -1215,8 +1264,7 @@ static int open_library(const char* name, off64_t* file_offset) {
 static const char* fix_dt_needed(const char* dt_needed, const char* sopath __unused) {
 #if !defined(__LP64__)
   // Work around incorrect DT_NEEDED entries for old apps: http://b/21364029
-  uint32_t target_sdk_version = get_application_target_sdk_version();
-  if (target_sdk_version != 0 && target_sdk_version <= 22) {
+  if (get_application_target_sdk_version() <= 22) {
     const char* bname = basename(dt_needed);
     if (bname != dt_needed) {
       DL_WARN("'%s' library has invalid DT_NEEDED entry '%s'", sopath, dt_needed);
@@ -1289,7 +1337,7 @@ static soinfo* load_library(int fd, off64_t file_offset,
   }
 
   // Read the ELF header and load the segments.
-  ElfReader elf_reader(realpath.c_str(), fd, file_offset);
+  ElfReader elf_reader(realpath.c_str(), fd, file_offset, file_stat.st_size);
   if (!elf_reader.Load(extinfo)) {
     return nullptr;
   }
@@ -1316,8 +1364,8 @@ static soinfo* load_library(int fd, off64_t file_offset,
   return si;
 }
 
-static soinfo* load_library(LoadTaskList& load_tasks,
-                            const char* name, int rtld_flags,
+static soinfo* load_library(LoadTaskList& load_tasks, const char* name,
+                            soinfo* needed_by, int rtld_flags,
                             const android_dlextinfo* extinfo) {
   if (extinfo != nullptr && (extinfo->flags & ANDROID_DLEXT_USE_LIBRARY_FD) != 0) {
     off64_t file_offset = 0;
@@ -1329,7 +1377,7 @@ static soinfo* load_library(LoadTaskList& load_tasks,
 
   // Open the file.
   off64_t file_offset;
-  int fd = open_library(name, &file_offset);
+  int fd = open_library(name, needed_by, &file_offset);
   if (fd == -1) {
     DL_ERR("library \"%s\" not found", name);
     return nullptr;
@@ -1339,30 +1387,64 @@ static soinfo* load_library(LoadTaskList& load_tasks,
   return result;
 }
 
-static soinfo *find_loaded_library_by_soname(const char* name) {
+// Returns true if library was found and false in 2 cases
+// 1. The library was found but loaded under different target_sdk_version
+//    (*candidate != nullptr)
+// 2. The library was not found by soname (*candidate is nullptr)
+static bool find_loaded_library_by_soname(const char* name, soinfo** candidate) {
+  *candidate = nullptr;
+
   // Ignore filename with path.
   if (strchr(name, '/') != nullptr) {
-    return nullptr;
+    return false;
   }
+
+  uint32_t target_sdk_version = get_application_target_sdk_version();
 
   for (soinfo* si = solist; si != nullptr; si = si->next) {
     const char* soname = si->get_soname();
     if (soname != nullptr && (strcmp(name, soname) == 0)) {
-      return si;
+      // If the library was opened under different target sdk version
+      // skip this step and try to reopen it. The exceptions are
+      // "libdl.so" and global group. There is no point in skipping
+      // them because relocation process is going to use them
+      // in any case.
+      bool is_libdl = si == solist;
+      if (is_libdl || (si->get_dt_flags_1() & DF_1_GLOBAL) != 0 ||
+          !si->is_linked() || si->get_target_sdk_version() == target_sdk_version) {
+        *candidate = si;
+        return true;
+      } else if (*candidate == nullptr) {
+        // for the different sdk version - remember the first library.
+        *candidate = si;
+      }
     }
   }
-  return nullptr;
+
+  return false;
 }
 
 static soinfo* find_library_internal(LoadTaskList& load_tasks, const char* name,
-                                     int rtld_flags, const android_dlextinfo* extinfo) {
-  soinfo* si = find_loaded_library_by_soname(name);
+                                     soinfo* needed_by, int rtld_flags,
+                                     const android_dlextinfo* extinfo) {
+  soinfo* candidate;
+
+  if (find_loaded_library_by_soname(name, &candidate)) {
+    return candidate;
+  }
 
   // Library might still be loaded, the accurate detection
   // of this fact is done by load_library.
-  if (si == nullptr) {
-    TRACE("[ '%s' has not been found by soname.  Trying harder...]", name);
-    si = load_library(load_tasks, name, rtld_flags, extinfo);
+  TRACE("[ '%s' find_loaded_library_by_soname returned false (*candidate=%s@%p). Trying harder...]",
+      name, candidate == nullptr ? "n/a" : candidate->get_realpath(), candidate);
+
+  soinfo* si = load_library(load_tasks, name, needed_by, rtld_flags, extinfo);
+
+  // In case we were unable to load the library but there
+  // is a candidate loaded under the same soname but different
+  // sdk level - return it anyways.
+  if (si == nullptr && candidate != nullptr) {
+    si = candidate;
   }
 
   return si;
@@ -1431,12 +1513,12 @@ static bool find_libraries(soinfo* start_with, const char* const library_names[]
   // Step 1: load and pre-link all DT_NEEDED libraries in breadth first order.
   for (LoadTask::unique_ptr task(load_tasks.pop_front());
       task.get() != nullptr; task.reset(load_tasks.pop_front())) {
-    soinfo* si = find_library_internal(load_tasks, task->get_name(), rtld_flags, extinfo);
+    soinfo* needed_by = task->get_needed_by();
+    soinfo* si = find_library_internal(load_tasks, task->get_name(), needed_by,
+                                       rtld_flags, extinfo);
     if (si == nullptr) {
       return false;
     }
-
-    soinfo* needed_by = task->get_needed_by();
 
     if (needed_by != nullptr) {
       needed_by->add_child(si);
@@ -2334,6 +2416,16 @@ soinfo::soinfo_list_t& soinfo::get_parents() {
   return g_empty_list;
 }
 
+static std::vector<std::string> g_empty_runpath;
+
+const std::vector<std::string>& soinfo::get_dt_runpath() const {
+  if (has_min_version(2)) {
+    return dt_runpath_;
+  }
+
+  return g_empty_runpath;
+}
+
 ElfW(Addr) soinfo::resolve_symbol_address(const ElfW(Sym)* s) const {
   if (ELF_ST_TYPE(s->st_info) == STT_GNU_IFUNC) {
     return call_ifunc_resolver(s->st_value + load_bias);
@@ -2391,64 +2483,15 @@ soinfo* soinfo::get_local_group_root() const {
   return local_group_root_;
 }
 
-/* Force any of the closed stdin, stdout and stderr to be associated with
-   /dev/null. */
-static int nullify_closed_stdio() {
-  int dev_null, i, status;
-  int return_value = 0;
-
-  dev_null = TEMP_FAILURE_RETRY(open("/dev/null", O_RDWR));
-  if (dev_null < 0) {
-    DL_ERR("cannot open /dev/null: %s", strerror(errno));
-    return -1;
-  }
-  TRACE("[ Opened /dev/null file-descriptor=%d]", dev_null);
-
-  /* If any of the stdio file descriptors is valid and not associated
-     with /dev/null, dup /dev/null to it.  */
-  for (i = 0; i < 3; i++) {
-    /* If it is /dev/null already, we are done. */
-    if (i == dev_null) {
-      continue;
-    }
-
-    TRACE("[ Nullifying stdio file descriptor %d]", i);
-    status = TEMP_FAILURE_RETRY(fcntl(i, F_GETFL));
-
-    /* If file is opened, we are good. */
-    if (status != -1) {
-      continue;
-    }
-
-    /* The only error we allow is that the file descriptor does not
-       exist, in which case we dup /dev/null to it. */
-    if (errno != EBADF) {
-      DL_ERR("fcntl failed: %s", strerror(errno));
-      return_value = -1;
-      continue;
-    }
-
-    /* Try dupping /dev/null to this stdio file descriptor and
-       repeat if there is a signal.  Note that any errors in closing
-       the stdio descriptor are lost.  */
-    status = TEMP_FAILURE_RETRY(dup2(dev_null, i));
-    if (status < 0) {
-      DL_ERR("dup2 failed: %s", strerror(errno));
-      return_value = -1;
-      continue;
-    }
+// This function returns api-level at the time of
+// dlopen/load. Note that libraries opened by system
+// will always have 'current' api level.
+uint32_t soinfo::get_target_sdk_version() const {
+  if (!has_min_version(2)) {
+    return __ANDROID_API__;
   }
 
-  /* If /dev/null is not one of the stdio file descriptors, close it. */
-  if (dev_null > 2) {
-    TRACE("[ Closing /dev/null file-descriptor=%d]", dev_null);
-    if (close(dev_null) == -1) {
-      DL_ERR("close failed: %s", strerror(errno));
-      return_value = -1;
-    }
-  }
-
-  return return_value;
+  return local_group_root_->target_sdk_version_;
 }
 
 bool soinfo::prelink_image() {
@@ -2819,6 +2862,10 @@ bool soinfo::prelink_image() {
         verneed_cnt_ = d->d_un.d_val;
         break;
 
+      case DT_RUNPATH:
+        // this is parsed after we have strtab initialized (see below).
+        break;
+
       default:
         if (!relocating_linker) {
           DL_WARN("%s: unused DT entry: type %p arg %p", get_realpath(),
@@ -2828,16 +2875,11 @@ bool soinfo::prelink_image() {
     }
   }
 
-  // second pass - parse entries relying on strtab
-  for (ElfW(Dyn)* d = dynamic; d->d_tag != DT_NULL; ++d) {
-    if (d->d_tag == DT_SONAME) {
-      soname_ = get_string(d->d_un.d_val);
-#if defined(__work_around_b_19059885__)
-      strlcpy(old_name_, soname_, sizeof(old_name_));
-#endif
-      break;
-    }
+#if defined(__mips__) && !defined(__LP64__)
+  if (!mips_check_and_adjust_fp_modes()) {
+    return false;
   }
+#endif
 
   DEBUG("si->base = %p, si->strtab = %p, si->symtab = %p",
         reinterpret_cast<void*>(base), strtab_, symtab_);
@@ -2860,6 +2902,35 @@ bool soinfo::prelink_image() {
     DL_ERR("empty/missing DT_SYMTAB in \"%s\"", get_realpath());
     return false;
   }
+
+  // second pass - parse entries relying on strtab
+  for (ElfW(Dyn)* d = dynamic; d->d_tag != DT_NULL; ++d) {
+    switch (d->d_tag) {
+      case DT_SONAME:
+        soname_ = get_string(d->d_un.d_val);
+#if defined(__work_around_b_19059885__)
+        strlcpy(old_name_, soname_, sizeof(old_name_));
+#endif
+        break;
+      case DT_RUNPATH:
+        // FIXME: $LIB, $PLATFORM unsupported.
+        set_dt_runpath(get_string(d->d_un.d_val));
+        break;
+    }
+  }
+
+  // Before M release linker was using basename in place of soname.
+  // In the case when dt_soname is absent some apps stop working
+  // because they can't find dt_needed library by soname.
+  // This workaround should keep them working. (applies only
+  // for apps targeting sdk version <=22). Make an exception for
+  // the main executable and linker; they do not need to have dt_soname
+  if (soname_ == nullptr && this != somain && (flags_ & FLAG_LINKER) == 0 &&
+      get_application_target_sdk_version() <= 22) {
+    soname_ = basename(realpath_.c_str());
+    DL_WARN("%s: is missing DT_SONAME will use basename as a replacement: \"%s\"",
+        get_realpath(), soname_);
+  }
   return true;
 }
 
@@ -2871,6 +2942,10 @@ bool soinfo::link_image(const soinfo_list_t& global_group, const soinfo_list_t& 
     local_group_root_ = this;
   }
 
+  if ((flags_ & FLAG_LINKER) == 0 && local_group_root_ == this) {
+    target_sdk_version_ = get_application_target_sdk_version();
+  }
+
   VersionTracker version_tracker;
 
   if (!version_tracker.init(this)) {
@@ -2879,6 +2954,13 @@ bool soinfo::link_image(const soinfo_list_t& global_group, const soinfo_list_t& 
 
 #if !defined(__LP64__)
   if (has_text_relocations) {
+    // Fail if app is targeting sdk version > 22
+    // TODO (dimitry): remove != __ANDROID_API__ check once http://b/20020312 is fixed
+    if (get_application_target_sdk_version() != __ANDROID_API__
+        && get_application_target_sdk_version() > 22) {
+      DL_ERR("%s: has text relocations", get_realpath());
+      return false;
+    }
     // Make segments writable to allow text relocations to work properly. We will later call
     // phdr_table_protect_segments() after all of them are applied and all constructors are run.
     DL_WARN("%s has text relocations. This is wasting memory and prevents "
@@ -3048,7 +3130,7 @@ static soinfo* linker_soinfo_for_gdb = nullptr;
 static void init_linker_info_for_gdb(ElfW(Addr) linker_base) {
   linker_soinfo_for_gdb = new (linker_soinfo_for_gdb_buf) soinfo(LINKER_PATH, nullptr, 0, 0);
 
-  linker_soinfo_for_gdb->base = linker_base;
+  linker_soinfo_for_gdb->load_bias = linker_base;
 
   /*
    * Set the dynamic field in the link map otherwise gdb will complain with
@@ -3076,33 +3158,27 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
   gettimeofday(&t0, 0);
 #endif
 
-  // Initialize environment functions, and get to the ELF aux vectors table.
-  linker_env_init(args);
+  // Sanitize the environment.
+  __libc_init_AT_SECURE(args);
 
   // Initialize system properties
   __system_properties_init(); // may use 'environ'
 
-  // If this is a setuid/setgid program, close the security hole described in
-  // ftp://ftp.freebsd.org/pub/FreeBSD/CERT/advisories/FreeBSD-SA-02:23.stdio.asc
-  if (get_AT_SECURE()) {
-    nullify_closed_stdio();
-  }
-
   debuggerd_init();
 
   // Get a few environment variables.
-  const char* LD_DEBUG = linker_env_get("LD_DEBUG");
+  const char* LD_DEBUG = getenv("LD_DEBUG");
   if (LD_DEBUG != nullptr) {
     g_ld_debug_verbosity = atoi(LD_DEBUG);
   }
 
-  // Normally, these are cleaned by linker_env_init, but the test
+  // These should have been sanitized by __libc_init_AT_SECURE, but the test
   // doesn't cost us anything.
   const char* ldpath_env = nullptr;
   const char* ldpreload_env = nullptr;
-  if (!get_AT_SECURE()) {
-    ldpath_env = linker_env_get("LD_LIBRARY_PATH");
-    ldpreload_env = linker_env_get("LD_PRELOAD");
+  if (!getauxval(AT_SECURE)) {
+    ldpath_env = getenv("LD_LIBRARY_PATH");
+    ldpreload_env = getenv("LD_PRELOAD");
   }
 
 #if !defined(__LP64__)

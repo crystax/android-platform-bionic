@@ -2,8 +2,9 @@
 
 #include <private/bionic_asm.h>
 
-ENTRY(flistxattr)
-    movl    $__NR_flistxattr, %eax
+ENTRY(process_vm_writev)
+    movq    %rcx, %r10
+    movl    $__NR_process_vm_writev, %eax
     syscall
     cmpq    $-MAX_ERRNO, %rax
     jb      1f
@@ -12,4 +13,4 @@ ENTRY(flistxattr)
     call    __set_errno_internal
 1:
     ret
-END(flistxattr)
+END(process_vm_writev)

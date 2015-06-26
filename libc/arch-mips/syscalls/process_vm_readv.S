@@ -2,10 +2,10 @@
 
 #include <private/bionic_asm.h>
 
-ENTRY(flistxattr)
+ENTRY(process_vm_readv)
     .set noreorder
     .cpload t9
-    li v0, __NR_flistxattr
+    li v0, __NR_process_vm_readv
     syscall
     bnez a3, 1f
     move a0, v0
@@ -16,4 +16,4 @@ ENTRY(flistxattr)
     j t9
     nop
     .set reorder
-END(flistxattr)
+END(process_vm_readv)

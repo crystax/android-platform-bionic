@@ -2,10 +2,10 @@
 
 #include <private/bionic_asm.h>
 
-ENTRY(__clock_nanosleep)
+ENTRY(___flistxattr)
     .set push
     .set noreorder
-    li v0, __NR_clock_nanosleep
+    li v0, __NR_flistxattr
     syscall
     bnez a3, 1f
     move a0, v0
@@ -22,5 +22,5 @@ ENTRY(__clock_nanosleep)
     j t9
     move ra, t0
     .set pop
-END(__clock_nanosleep)
-.hidden __clock_nanosleep
+END(___flistxattr)
+.hidden ___flistxattr

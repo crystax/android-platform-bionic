@@ -9,7 +9,6 @@ LOCAL_SRC_FILES:= \
     linker_allocator.cpp \
     linker_sdk_versions.cpp \
     linker_block_allocator.cpp \
-    linker_environ.cpp \
     linker_libc_support.c \
     linker_memory.cpp \
     linker_phdr.cpp \
@@ -38,16 +37,6 @@ LOCAL_CFLAGS += \
 
 LOCAL_CFLAGS_arm += -D__work_around_b_19059885__
 LOCAL_CFLAGS_x86 += -D__work_around_b_19059885__
-
-# For mips r6 (both 32bit and 64bit), GDB cannot stop on a breakpoint
-# if rt.cpp is compiled with compact branches optimization.
-# Unfortunately, we cannot turn generation of JIC compact branch off,
-# but we can add unoptimized code which will allow GDB to insert a
-# breakpoint on it.
-# TODO: Remove this after GDB is fixed.
-ifeq ($(TARGET_ARCH),mips64)
-LOCAL_CFLAGS += -fno-omit-frame-pointer
-endif
 
 LOCAL_CONLYFLAGS += \
     -std=gnu99 \

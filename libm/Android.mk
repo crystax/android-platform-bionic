@@ -3,8 +3,9 @@ LOCAL_PATH:= $(call my-dir)
 
 bionic_coverage := false
 
-ifneq (,$(filter $(TARGET_ARCH),x86 x86_64))
-# Clang has wrong long double sizes for x86.
+# Clang/llvm has incompatible long double (fp128) for x86_64.
+# https://llvm.org/bugs/show_bug.cgi?id=23897
+ifeq ($(TARGET_ARCH),x86_64)
 libm_clang := false
 endif
 
@@ -502,7 +503,7 @@ LOCAL_CFLAGS += \
     -fno-builtin-rintl \
 
 LOCAL_NATIVE_COVERAGE := $(bionic_coverage)
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 include $(BUILD_STATIC_LIBRARY)
 
 # -----------------------------------------------------------------------------
@@ -510,9 +511,13 @@ include $(BUILD_STATIC_LIBRARY)
 # -----------------------------------------------------------------------------
 include $(CLEAR_VARS)
 
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/libm.map
+
 # TODO: This is to work around b/19059885. Remove after root cause is fixed
 LOCAL_LDFLAGS_arm := -Wl,--hash-style=both
 LOCAL_LDFLAGS_x86 := -Wl,--hash-style=both
+
+LOCAL_LDFLAGS := -Wl,--version-script,$(LOCAL_PATH)/libm.map
 
 LOCAL_MODULE := libm
 LOCAL_CLANG := $(libm_clang)
@@ -520,7 +525,7 @@ LOCAL_SYSTEM_SHARED_LIBRARIES := libc
 LOCAL_WHOLE_STATIC_LIBRARIES := libm
 
 LOCAL_NATIVE_COVERAGE := $(bionic_coverage)
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 
 LOCAL_CXX_STL := none
 

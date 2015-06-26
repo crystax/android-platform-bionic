@@ -250,7 +250,9 @@ struct soinfo {
   bool mips_relocate_got(const VersionTracker& version_tracker,
                          const soinfo_list_t& global_group,
                          const soinfo_list_t& local_group);
-
+#if !defined(__LP64__)
+  bool mips_check_and_adjust_fp_modes();
+#endif
 #endif
   size_t ref_count_;
  public:
@@ -334,6 +336,10 @@ struct soinfo {
 
   bool find_verdef_version_index(const version_info* vi, ElfW(Versym)* versym) const;
 
+  uint32_t get_target_sdk_version() const;
+
+  const std::vector<std::string>& get_dt_runpath() const;
+
  private:
   bool elf_lookup(SymbolName& symbol_name, const version_info* vi, uint32_t* symbol_index) const;
   ElfW(Sym)* elf_addr_lookup(const void* addr);
@@ -392,6 +398,11 @@ struct soinfo {
 
   ElfW(Addr) verneed_ptr_;
   size_t verneed_cnt_;
+
+  uint32_t target_sdk_version_;
+
+  void set_dt_runpath(const char *);
+  std::vector<std::string> dt_runpath_;
 
   friend soinfo* get_libdl_info();
 };

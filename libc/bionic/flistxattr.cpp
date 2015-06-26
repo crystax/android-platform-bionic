@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,19 +26,34 @@
  * SUCH DAMAGE.
  */
 
-#ifndef LINKER_ENVIRON_H
-#define LINKER_ENVIRON_H
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/xattr.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
 
-class KernelArgumentBlock;
+extern "C" ssize_t ___flistxattr(int, char*, size_t);
 
-// Call this function before any of the other functions in this header file.
-extern void linker_env_init(KernelArgumentBlock& args);
+ssize_t flistxattr(int fd, char *list, size_t size) {
+  int saved_errno = errno;
+  ssize_t result = ___flistxattr(fd, list, size);
 
-// Returns the value of environment variable 'name' if defined and not
-// empty, or null otherwise.
-extern const char* linker_env_get(const char* name);
+  if ((result != -1) || (errno != EBADF)) {
+    return result;
+  }
 
-// Returns the value of this program's AT_SECURE variable.
-extern bool get_AT_SECURE();
+  // fd could be an O_PATH file descriptor, and the kernel
+  // may not directly support fgetxattr() on such a file descriptor.
+  // Use /proc/self/fd instead to emulate this support.
+  int fd_flag = fcntl(fd, F_GETFL);
+  if ((fd_flag == -1) || ((fd_flag & O_PATH) == 0)) {
+    errno = EBADF;
+    return -1;
+  }
 
-#endif // LINKER_ENVIRON_H
+  char buf[40];
+  snprintf(buf, sizeof(buf), "/proc/self/fd/%d", fd);
+  errno = saved_errno;
+  return listxattr(buf, list, size);
+}
