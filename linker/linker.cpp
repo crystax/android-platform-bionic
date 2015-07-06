@@ -37,7 +37,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/param.h>
-#include <sys/personality.h>
 #include <unistd.h>
 
 #include <new>
@@ -393,7 +392,7 @@ _Unwind_Ptr dl_unwind_find_exidx(_Unwind_Ptr pc, int* pcount) {
 
 // Here, we only have to provide a callback to iterate across all the
 // loaded libraries. gcc_eh does the rest.
-int dl_iterate_phdr(int (*cb)(dl_phdr_info* info, size_t size, void* data), void* data) {
+int do_dl_iterate_phdr(int (*cb)(dl_phdr_info* info, size_t size, void* data), void* data) {
   int rv = 0;
   for (soinfo* si = solist; si != nullptr; si = si->next) {
     dl_phdr_info dl_info;
@@ -1159,7 +1158,7 @@ static int open_library_in_zipfile(const char* const path,
 
   ZipEntry entry;
 
-  if (FindEntry(handle, ZipEntryName(file_path), &entry) != 0) {
+  if (FindEntry(handle, ZipString(file_path), &entry) != 0) {
     // Entry was not found.
     close(fd);
     return -1;
@@ -3180,12 +3179,6 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
     ldpath_env = getenv("LD_LIBRARY_PATH");
     ldpreload_env = getenv("LD_PRELOAD");
   }
-
-#if !defined(__LP64__)
-  if (personality(PER_LINUX32) == -1) {
-    __libc_fatal("error setting PER_LINUX32 personality: %s", strerror(errno));
-  }
-#endif
 
   INFO("[ android linker & debugger ]");
 
