@@ -29,9 +29,14 @@
 #ifndef _SYS_SYSCALL_H_
 #define _SYS_SYSCALL_H_
 
+#include <sys/cdefs.h>
 #include <asm/unistd.h> /* Linux kernel __NR_* names. */
 #include <sys/glibc-syscalls.h> /* glibc-compatible SYS_* aliases. */
 
-/* The syscall function itself is declared in <unistd.h>, not here. */
+__BEGIN_DECLS
+
+long syscall(long number, ...);
+
+__END_DECLS
 
 #endif /* _SYS_SYSCALL_H_ */
