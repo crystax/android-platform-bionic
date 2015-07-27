@@ -19,13 +19,12 @@
 #include <sys/auxv.h>
 #include <unistd.h>
 
-// x86 has a vdso, but there's nothing useful to us in it.
-#if defined(__aarch64__) || defined(__x86_64__)
+#if defined(__aarch64__) || defined(__x86_64__) || defined (__i386__)
 
 #if defined(__aarch64__)
 #define VDSO_CLOCK_GETTIME_SYMBOL "__kernel_clock_gettime"
 #define VDSO_GETTIMEOFDAY_SYMBOL  "__kernel_gettimeofday"
-#elif defined(__x86_64__)
+#elif defined(__x86_64__) || defined(__i386__)
 #define VDSO_CLOCK_GETTIME_SYMBOL "__vdso_clock_gettime"
 #define VDSO_GETTIMEOFDAY_SYMBOL  "__vdso_gettimeofday"
 #endif
@@ -52,29 +51,27 @@ enum {
   VDSO_END
 };
 
-static const vdso_entry vdso_entries_template[] = {
+static union {
+  vdso_entry entries[VDSO_END];
+  char padding[PAGE_SIZE];
+} vdso __attribute__((aligned(PAGE_SIZE))) = {{
   [VDSO_CLOCK_GETTIME] = { VDSO_CLOCK_GETTIME_SYMBOL, reinterpret_cast<void*>(__clock_gettime) },
   [VDSO_GETTIMEOFDAY] = { VDSO_GETTIMEOFDAY_SYMBOL, reinterpret_cast<void*>(__gettimeofday) },
-};
-
-static vdso_entry* vdso_entries;
+}};
 
 int clock_gettime(int clock_id, timespec* tp) {
   int (*vdso_clock_gettime)(int, timespec*) =
-      reinterpret_cast<int (*)(int, timespec*)>(vdso_entries[VDSO_CLOCK_GETTIME].fn);
+      reinterpret_cast<int (*)(int, timespec*)>(vdso.entries[VDSO_CLOCK_GETTIME].fn);
   return vdso_clock_gettime(clock_id, tp);
 }
 
 int gettimeofday(timeval* tv, struct timezone* tz) {
   int (*vdso_gettimeofday)(timeval*, struct timezone*) =
-      reinterpret_cast<int (*)(timeval*, struct timezone*)>(vdso_entries[VDSO_GETTIMEOFDAY].fn);
+      reinterpret_cast<int (*)(timeval*, struct timezone*)>(vdso.entries[VDSO_GETTIMEOFDAY].fn);
   return vdso_gettimeofday(tv, tz);
 }
 
 static void __libc_init_vdso_entries() {
-  // Set up the defaults in case we don't have a vdso or can't find everything we're looking for.
-  memcpy(vdso_entries, vdso_entries_template, sizeof(vdso_entries_template));
-
   // Do we have a vdso?
   uintptr_t vdso_ehdr_addr = getauxval(AT_SYSINFO_EHDR);
   ElfW(Ehdr)* vdso_ehdr = reinterpret_cast<ElfW(Ehdr)*>(vdso_ehdr_addr);
@@ -126,25 +123,22 @@ static void __libc_init_vdso_entries() {
   // Are there any symbols we want?
   for (size_t i = 0; i < symbol_count; ++i) {
     for (size_t j = 0; j < VDSO_END; ++j) {
-      if (strcmp(vdso_entries[j].name, strtab + symtab[i].st_name) == 0) {
-        vdso_entries[j].fn = reinterpret_cast<void*>(vdso_addr + symtab[i].st_value);
+      if (strcmp(vdso.entries[j].name, strtab + symtab[i].st_name) == 0) {
+        vdso.entries[j].fn = reinterpret_cast<void*>(vdso_addr + symtab[i].st_value);
       }
     }
   }
 }
 
 void __libc_init_vdso() {
-  static_assert(PAGE_SIZE >= sizeof(vdso_entries_template), "vdso_entries_template too large");
-  vdso_entries = reinterpret_cast<vdso_entry*>(mmap(nullptr, sizeof(vdso_entries_template), PROT_READ|PROT_WRITE,
-                                                    MAP_ANONYMOUS|MAP_PRIVATE, -1, 0));
-  if (vdso_entries == MAP_FAILED) {
-    __libc_fatal("failed to allocate vdso function pointer table: %s", strerror(errno));
-  }
   __libc_init_vdso_entries();
-  if (mprotect(vdso_entries, sizeof(vdso_entries_template), PROT_READ) == -1) {
+
+  // We can't use PR_SET_VMA because this isn't an anonymous region.
+  // Long-term we should be able to replace all of this with ifuncs.
+  static_assert(PAGE_SIZE == sizeof(vdso), "sizeof(vdso) too large");
+  if (mprotect(vdso.entries, sizeof(vdso), PROT_READ) == -1) {
     __libc_fatal("failed to mprotect PROT_READ vdso function pointer table: %s", strerror(errno));
   }
-  prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, vdso_entries, sizeof(vdso_entries_template), "vdso function pointer table");
 }
 
 #else
