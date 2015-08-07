@@ -70,6 +70,9 @@ libc_common_src_files := \
 libc_common_src_files += \
     bionic/__FD_chk.cpp \
     bionic/__fgets_chk.cpp \
+    bionic/__fread_chk.cpp \
+    bionic/__fwrite_chk.cpp \
+    bionic/__getcwd_chk.cpp \
     bionic/__memchr_chk.cpp \
     bionic/__memmove_chk.cpp \
     bionic/__memrchr_chk.cpp \
@@ -574,10 +577,6 @@ libc_openbsd_src_files_32 += \
 libc_common_cflags := \
     -D_LIBC=1 \
     -Wall -Wextra -Wunused \
-
-ifneq ($(TARGET_USES_LOGD),false)
-libc_common_cflags += -DTARGET_USES_LOGD
-endif
 
 use_clang := $(USE_CLANG_PLATFORM_BUILD)
 

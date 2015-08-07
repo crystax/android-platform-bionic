@@ -57,6 +57,8 @@
 #include "linker_phdr.h"
 #include "linker_relocs.h"
 #include "linker_reloc_iterators.h"
+
+#include "base/strings.h"
 #include "ziparchive/zip_archive.h"
 
 extern void __libc_init_AT_SECURE(KernelArgumentBlock&);
@@ -308,25 +310,9 @@ static void soinfo_free(soinfo* si) {
 
 static void parse_path(const char* path, const char* delimiters,
                        std::vector<std::string>* paths) {
-  if (path == nullptr) {
-    return;
-  }
-
   paths->clear();
-
-  for (const char *p = path; ; ++p) {
-    size_t len = strcspn(p, delimiters);
-    // skip empty tokens
-    if (len == 0) {
-      continue;
-    }
-
-    paths->push_back(std::string(p, len));
-    p += len;
-
-    if (*p == '\0') {
-      break;
-    }
+  if (path != nullptr) {
+    *paths = android::base::Split(path, delimiters);
   }
 }
 
@@ -1999,9 +1985,32 @@ bool soinfo::relocate(const VersionTracker& version_tracker, ElfRelIteratorT&& r
             DL_ERR("unknown weak reloc type %d @ %p (%zu)", type, rel, idx);
             return false;
         }
-      } else {
-        // We got a definition.
+      } else { // We got a definition.
+#if !defined(__LP64__)
+        // When relocating dso with text_relocation .text segment is
+        // not executable. We need to restore elf flags before resolving
+        // STT_GNU_IFUNC symbol.
+        bool protect_segments = has_text_relocations &&
+                                lsi == this &&
+                                ELF_ST_TYPE(s->st_info) == STT_GNU_IFUNC;
+        if (protect_segments) {
+          if (phdr_table_protect_segments(phdr, phnum, load_bias) < 0) {
+            DL_ERR("can't protect segments for \"%s\": %s",
+                   get_realpath(), strerror(errno));
+            return false;
+          }
+        }
+#endif
         sym_addr = lsi->resolve_symbol_address(s);
+#if !defined(__LP64__)
+        if (protect_segments) {
+          if (phdr_table_unprotect_segments(phdr, phnum, load_bias) < 0) {
+            DL_ERR("can't unprotect loadable segments for \"%s\": %s",
+                   get_realpath(), strerror(errno));
+            return false;
+          }
+        }
+#endif
       }
       count_relocation(kRelocSymbol);
     }
@@ -2038,7 +2047,32 @@ bool soinfo::relocate(const VersionTracker& version_tracker, ElfRelIteratorT&& r
         TRACE_TYPE(RELO, "RELO IRELATIVE %16p <- %16p\n",
                     reinterpret_cast<void*>(reloc),
                     reinterpret_cast<void*>(load_bias + addend));
-        *reinterpret_cast<ElfW(Addr)*>(reloc) = call_ifunc_resolver(load_bias + addend);
+        {
+#if !defined(__LP64__)
+          // When relocating dso with text_relocation .text segment is
+          // not executable. We need to restore elf flags for this
+          // particular call.
+          if (has_text_relocations) {
+            if (phdr_table_protect_segments(phdr, phnum, load_bias) < 0) {
+              DL_ERR("can't protect segments for \"%s\": %s",
+                     get_realpath(), strerror(errno));
+              return false;
+            }
+          }
+#endif
+          ElfW(Addr) ifunc_addr = call_ifunc_resolver(load_bias + addend);
+#if !defined(__LP64__)
+          // Unprotect it afterwards...
+          if (has_text_relocations) {
+            if (phdr_table_unprotect_segments(phdr, phnum, load_bias) < 0) {
+              DL_ERR("can't unprotect loadable segments for \"%s\": %s",
+                     get_realpath(), strerror(errno));
+              return false;
+            }
+          }
+#endif
+          *reinterpret_cast<ElfW(Addr)*>(reloc) = ifunc_addr;
+        }
         break;
 
 #if defined(__aarch64__)

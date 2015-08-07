@@ -99,7 +99,8 @@ long sysconf(int name) {
     case _SC_ATEXIT_MAX:        return LONG_MAX;    // Unlimited.
     case _SC_IOV_MAX:           return UIO_MAXIOV;
 
-    case _SC_PAGESIZE:          // Fall through, PAGESIZE and PAGE_SIZE always hold the same value.
+    // _SC_PAGESIZE and _SC_PAGE_SIZE are distinct, but return the same value.
+    case _SC_PAGESIZE:
     // todo: zuav: getauxval fails to open /proc/pid/auxv, see issue #1020
     // case _SC_PAGE_SIZE:         return static_cast<long>(getauxval(AT_PAGESZ));
     case _SC_PAGE_SIZE:         return 4096;

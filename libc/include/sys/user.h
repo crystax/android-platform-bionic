@@ -30,10 +30,12 @@
 #define _SYS_USER_H_
 
 #include <sys/cdefs.h>
-#include <limits.h> /* For PAGE_SIZE. */
 #include <stddef.h> /* For size_t. */
 
 __BEGIN_DECLS
+
+#define PAGE_SIZE 4096
+#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 #if __i386__
 
