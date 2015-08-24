@@ -26,7 +26,18 @@
  * SUCH DAMAGE.
  */
 
-// Indicate which memcpy base file to include.
-#define MEMCPY_BASE "memcpy_base.S"
+#undef _FORTIFY_SOURCE
+#include <unistd.h>
+#include "private/libc_logging.h"
 
-#include "__strcat_chk_common.S"
+extern "C" ssize_t __write_chk(int fd, const void* buf, size_t count, size_t buf_size) {
+  if (__predict_false(count > buf_size)) {
+    __fortify_chk_fail("write: prevented read past end of buffer", 0);
+  }
+
+  if (__predict_false(count > SSIZE_MAX)) {
+    __fortify_chk_fail("write: count > SSIZE_MAX", 0);
+  }
+
+  return write(fd, buf, count);
+}
