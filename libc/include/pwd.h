@@ -104,7 +104,7 @@ struct passwd
   char* pw_passwd;
   uid_t pw_uid;
   gid_t pw_gid;
-#ifdef __LP64__
+#if defined(__LP64__) || defined(__CRYSTAX__)
   char* pw_gecos;
 #endif
   char* pw_dir;
@@ -118,6 +118,12 @@ struct passwd* getpwuid(uid_t);
 
 int getpwnam_r(const char*, struct passwd*, char*, size_t, struct passwd**);
 int getpwuid_r(uid_t, struct passwd*, char*, size_t, struct passwd**);
+
+#if defined(__CRYSTAX__)
+struct passwd *getpwent(void);
+void endpwent(void);
+void setpwent(void);
+#endif /* __CRYSTAX__ */
 
 __END_DECLS
 

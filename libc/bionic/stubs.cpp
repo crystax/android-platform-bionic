@@ -117,8 +117,12 @@ static int do_getpw_r(int by_name, const char* name, uid_t uid,
 
   // pw_passwd and pw_gecos are non-POSIX and unused (always NULL) in bionic.
   dst->pw_passwd = NULL;
+#if defined(__CRYSTAX__)
+  dst->pw_gecos = src->pw_name;
+#else
 #if defined(__LP64__)
   dst->pw_gecos = NULL;
+#endif
 #endif
 
   // Copy the integral fields.
@@ -151,6 +155,9 @@ static passwd* android_iinfo_to_passwd(passwd_state_t* state,
   pw->pw_gid   = iinfo->aid;
   pw->pw_dir   = state->dir_buffer_;
   pw->pw_shell = state->sh_buffer_;
+#if defined(__CRYSTAX__)
+  pw->pw_gecos = pw->pw_name;
+#endif
   return pw;
 }
 
@@ -319,7 +326,7 @@ static void print_app_name_from_gid(const gid_t gid, char* buffer, const int buf
 // AID_USER+                        -> u1_radio, u1_a1234, u2_i1234, etc.
 // returns a passwd structure (sets errno to ENOENT on failure).
 static passwd* app_id_to_passwd(uid_t uid, passwd_state_t* state) {
-  if (uid < AID_APP) {
+  if (uid < AID_APP || uid == (uid_t)-1) {
     errno = ENOENT;
     return NULL;
   }
@@ -341,6 +348,9 @@ static passwd* app_id_to_passwd(uid_t uid, passwd_state_t* state) {
   pw->pw_shell = state->sh_buffer_;
   pw->pw_uid   = uid;
   pw->pw_gid   = uid;
+#if defined(__CRYSTAX__)
+  pw->pw_gecos = pw->pw_name;
+#endif
   return pw;
 }
 
