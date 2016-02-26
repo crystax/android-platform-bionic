@@ -38,6 +38,8 @@
 #include <linux/in6.h>
 #include <linux/ipv6.h>
 
+#include <arpa/inet.h>
+
 __BEGIN_DECLS
 
 #define IPPORT_RESERVED  1024
@@ -49,8 +51,17 @@ typedef uint32_t in_addr_t;
 
 extern int bindresvport (int sd, struct sockaddr_in *sin);
 
+#if defined(__GNUC__) && __GNUC__ >= 6
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-const-variable"
+#endif
+
 static const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
 static const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
+
+#if defined(__GNUC__) && __GNUC__ >= 6
+#pragma GCC diagnostic pop
+#endif
 
 __END_DECLS
 
