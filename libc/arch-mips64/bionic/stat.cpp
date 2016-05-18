@@ -26,6 +26,8 @@
  * SUCH DAMAGE.
  */
 
+#if defined(__mips__) && defined(__LP64__)
+
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
@@ -87,3 +89,5 @@ int fstatat(int dirfd, const char* pathname, struct stat* buf, int flags) {
    return ret;
 }
 __strong_alias(fstatat64, fstatat);
+
+#endif /* defined(__mips__) && defined(__LP64__) */

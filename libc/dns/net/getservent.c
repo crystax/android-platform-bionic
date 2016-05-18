@@ -36,6 +36,7 @@
 void
 setservent(int f)
 {
+    (void)f;
     res_static  rs = __res_get_static();
     if (rs) {
         rs->servent_ptr = NULL;

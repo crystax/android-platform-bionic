@@ -421,5 +421,9 @@ res_nquerydomain(res_state statp,
 
 const char *
 res_hostalias(const res_state statp, const char *name, char *dst, size_t siz) {
+	(void)statp;
+	(void)name;
+	(void)dst;
+	(void)siz;
 	return (NULL);
 }

@@ -50,10 +50,6 @@ extern int sched_setparam(pid_t, const struct sched_param*);
 extern int sched_getparam(pid_t, struct sched_param*);
 extern int sched_rr_get_interval(pid_t, struct timespec*);
 
-#if defined(__CRYSTAX__)
-#define __USE_GNU 1
-#endif
-
 #if defined(__USE_GNU)
 
 extern int clone(int (*)(void*), void*, int, void*, ...);

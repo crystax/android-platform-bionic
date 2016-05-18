@@ -135,6 +135,70 @@ struct stat64 { __STAT64_BODY };
 #define DEFFILEMODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) /* 0666 */
 #endif
 
+#if __CRYSTAX__
+
+#undef  S_IRWXUGO
+#define S_IRWXUGO       (S_IRWXU|S_IRWXG|S_IRWXO)
+
+#undef  S_IALLUGO
+#define S_IALLUGO       (S_ISUID|S_ISGID|S_ISVTX|S_IRWXUGO)
+
+#undef  S_IRUGO
+#define S_IRUGO         (S_IRUSR|S_IRGRP|S_IROTH)
+
+#undef  S_IWUGO
+#define S_IWUGO         (S_IWUSR|S_IWGRP|S_IWOTH)
+
+#undef  S_IXUGO
+#define S_IXUGO         (S_IXUSR|S_IXGRP|S_IXOTH)
+
+#undef  S_TYPEISMQ
+#define S_TYPEISMQ(buf)  ((buf)->st_mode - (buf)->st_mode)
+
+#undef  S_TYPEISSEM
+#define S_TYPEISSEM(buf) ((buf)->st_mode - (buf)->st_mode)
+
+#undef  S_TYPEISSHM
+#define S_TYPEISSHM(buf) ((buf)->st_mode - (buf)->st_mode)
+
+#undef  S_TYPEISTMO
+#define S_TYPEISTMO(buf) ((buf)->st_mode - (buf)->st_mode)
+
+#undef  S_ISCTG
+#define S_ISCTG(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISDOOR
+#define S_ISDOOR(m) (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISMPB
+#define S_ISMPB(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISMPC
+#define S_ISMPC(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISMPX
+#define S_ISMPX(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISNAM
+#define S_ISNAM(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISNWK
+#define S_ISNWK(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISOFD
+#define S_ISOFD(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISOFL
+#define S_ISOFL(m)  (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISPORT
+#define S_ISPORT(m) (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#undef  S_ISWHT
+#define S_ISWHT(m) (((m) & S_IFMT) != ((m) & S_IFMT))
+
+#endif /* __CRYSTAX__ */
+
 extern int chmod(const char*, mode_t);
 extern int fchmod(int, mode_t);
 extern int mkdir(const char*, mode_t);
@@ -171,21 +235,27 @@ mode_t umask(mode_t mode) {
 }
 #endif /* defined(__BIONIC_FORTIFY) */
 
-_BIONIC_NOT_BEFORE_21(extern int mkfifo(const char*, mode_t);)
+extern int mkfifo(const char*, mode_t);
 extern int mkfifoat(int, const char*, mode_t);
 
 extern int fchmodat(int, const char*, mode_t, int);
 extern int mkdirat(int, const char*, mode_t);
 extern int mknodat(int, const char*, mode_t, dev_t);
 
+#if __CRYSTAX__
+extern int lchmod(const char *, mode_t);
+#endif
+
 #define UTIME_NOW  ((1L << 30) - 1L)
 #define UTIME_OMIT ((1L << 30) - 2L)
 extern int utimensat(int fd, const char *path, const struct timespec times[2], int flags);
 extern int futimens(int fd, const struct timespec times[2]);
 
+#if !__CRYSTAX__
 #if __ANDROID_API__ < 21
 #include <android/legacy_sys_stat_inlines.h>
 #endif
+#endif /* !__CRYSTAX__ */
 
 __END_DECLS
 

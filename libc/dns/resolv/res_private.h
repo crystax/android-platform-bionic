@@ -3,6 +3,8 @@
 #ifndef res_private_h
 #define res_private_h
 
+#include <resolv_private.h>
+
 struct __res_state_ext {
 	union res_sockaddr_union nsaddrs[MAXNS];
 	struct sort_list {

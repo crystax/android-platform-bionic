@@ -55,7 +55,14 @@ __RCSID("$NetBSD: sethostent.c,v 1.20 2014/03/17 13:24:23 christos Exp $");
 #include "hostent.h"
 #include "resolv_private.h"
 
+#ifdef ALIGNBYTES
+#undef ALIGNBYTES
+#endif
 #define ALIGNBYTES (sizeof(uintptr_t) - 1)
+
+#ifdef ALIGN
+#undef ALIGN
+#endif
 #define ALIGN(p) (((uintptr_t)(p) + ALIGNBYTES) &~ ALIGNBYTES)
 
 #ifndef _REENTRANT
@@ -92,6 +99,8 @@ _hf_gethtbyname(void *rv, void *cb_data, va_list ap)
 	const char *name;
 	int af;
 	struct getnamaddr *info = rv;
+
+	(void)cb_data;
 
 	_DIAGASSERT(rv != NULL);
 
@@ -245,6 +254,8 @@ _hf_gethtbyaddr(void *rv, void *cb_data, va_list ap)
 	const unsigned char *addr;
 	struct getnamaddr *info = rv;
 	FILE *hf;
+
+	(void)cb_data;
 
 	_DIAGASSERT(rv != NULL);
 

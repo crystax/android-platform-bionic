@@ -42,6 +42,8 @@
  */
 int     __isthreaded    = 0;
 
+void (*__cleanup)(void);
+
 /* BEGIN android-added: using __cxa_finalize and __cxa_thread_finalize */
 extern void __cxa_finalize(void* dso_handle);
 extern void __cxa_thread_finalize();

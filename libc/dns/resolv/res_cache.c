@@ -147,6 +147,7 @@
 /****************************************************************************/
 
 /* set to 1 to debug cache operations */
+#undef   DEBUG
 #define  DEBUG       0
 
 /* set to 1 to debug query data */

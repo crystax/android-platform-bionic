@@ -33,6 +33,11 @@ void* je_pvalloc(size_t bytes) {
 #undef je_memalign
 #endif
 
+#if __CRYSTAX__
+#define je_memalign crystax_je_memalign
+#define je_memalign_round_up_boundary crystax_je_memalign_round_up_boundary
+#endif
+
 // The man page for memalign says it fails if boundary is not a power of 2,
 // but this is not true. Both glibc and dlmalloc round up to the next power
 // of 2, so we'll do the same.

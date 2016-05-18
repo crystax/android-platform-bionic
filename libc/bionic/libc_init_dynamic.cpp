@@ -60,11 +60,27 @@ extern "C" {
   extern int __cxa_atexit(void (*)(void *), void *, void *);
 };
 
+#if __CRYSTAX__
+
+extern "C" void *__crystax_construct_rawargs();
+
+#define __libc_preinit __crystax___libc_preinit
+
+#endif /* __CRYSTAX__ */
+
 // We flag the __libc_preinit function as a constructor to ensure
 // that its address is listed in libc.so's .init_array section.
 // This ensures that the function is called by the dynamic linker
 // as soon as the shared library is loaded.
 __attribute__((constructor)) static void __libc_preinit() {
+#if __CRYSTAX__
+  KernelArgumentBlock args(__crystax_construct_rawargs());
+
+  __libc_init_main_thread(args);
+  __libc_init_AT_SECURE(args);
+  __libc_init_common(args);
+
+#else /* !__CRYSTAX__ */
   // Read the kernel argument block pointer from TLS.
   void** tls = __get_tls();
   KernelArgumentBlock** args_slot = &reinterpret_cast<KernelArgumentBlock**>(tls)[TLS_SLOT_BIONIC_PREINIT];
@@ -75,10 +91,13 @@ __attribute__((constructor)) static void __libc_preinit() {
   *args_slot = NULL;
 
   __libc_init_common(*args);
+#endif
 
   // Hooks for various libraries to let them know that we're starting up.
   malloc_debug_init();
+#if !__CRYSTAX__
   netdClientInit();
+#endif /* !__CRYSTAX__ */
 }
 
 __LIBC_HIDDEN__ void __libc_postfini() {

@@ -29,6 +29,11 @@
 #ifndef __BIONIC_PRIVATE_GET_TLS_H_
 #define __BIONIC_PRIVATE_GET_TLS_H_
 
+#if __CRYSTAX__
+#include <crystax/sys/tls.h>
+#define __get_tls() __crystax_get_tls()
+#else /* !__CRYSTAX__ */
+
 #if defined(__aarch64__)
 # define __get_tls() ({ void** __val; __asm__("mrs %0, tpidr_el0" : "=r"(__val)); __val; })
 #elif defined(__arm__)
@@ -49,5 +54,7 @@
 #else
 #error unsupported architecture
 #endif
+
+#endif /* !__CRYSTAX__ */
 
 #endif /* __BIONIC_PRIVATE_GET_TLS_H_ */

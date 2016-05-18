@@ -32,6 +32,10 @@
 #include <link.h>
 #include <sys/cdefs.h>
 
+#if __CRYSTAX__
+#define __libc_auxv __crystax___libc_auxv
+#endif
+
 __BEGIN_DECLS
 
 extern ElfW(auxv_t)* __libc_auxv;

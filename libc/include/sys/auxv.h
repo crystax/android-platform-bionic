@@ -31,6 +31,10 @@
 #include <linux/auxvec.h>
 #include <sys/cdefs.h>
 
+#if __CRYSTAX__
+#define getauxval crystax_getauxval
+#endif
+
 __BEGIN_DECLS
 
 unsigned long int getauxval(unsigned long int type);

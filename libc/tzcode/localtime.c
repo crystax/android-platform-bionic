@@ -333,7 +333,7 @@ differ_by_repeat(const time_t t1 __unused, const time_t t0 __unused)
 {
     if (TYPE_BIT(time_t) - TYPE_SIGNED(time_t) < SECSPERREPEAT_BITS)
         return 0;
-#if defined(__LP64__) // 32-bit Android only has a signed 32-bit time_t; 64-bit Android is fixed.
+#if defined(__LP64__) || (defined(__x86_64__) && defined(__ILP32__)) // 32-bit Android only has a signed 32-bit time_t; 64-bit Android is fixed.
     return t1 - t0 == SECSPERREPEAT;
 #endif
 }
@@ -1183,13 +1183,6 @@ gmtload(struct state * const sp)
         (void) tzparse(gmt, sp, TRUE);
 }
 
-#ifndef STD_INSPIRED
-/*
-** A non-static declaration of tzsetwall in a system header file
-** may cause a warning about this upcoming static declaration...
-*/
-static
-#endif /* !defined STD_INSPIRED */
 void
 tzsetwall(void)
 {
@@ -2239,8 +2232,8 @@ static int __bionic_open_tzdata_path(const char* path_prefix_variable, const cha
   }
 
   if (TEMP_FAILURE_RETRY(lseek(fd, specific_zone_offset, SEEK_SET)) == -1) {
-    fprintf(stderr, "%s: could not seek to %ld in \"%s\": %s\n",
-            __FUNCTION__, specific_zone_offset, path, strerror(errno));
+    fprintf(stderr, "%s: could not seek to %lld in \"%s\": %s\n",
+            __FUNCTION__, (long long)specific_zone_offset, path, strerror(errno));
     free(path);
     close(fd);
     return -1;

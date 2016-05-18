@@ -92,7 +92,9 @@
 #include <ctype.h>
 #include <errno.h>
 #include <netdb.h>
+#if !__CRYSTAX__
 #include "NetdClientDispatch.h"
+#endif /* !__CRYSTAX__ */
 #include "resolv_cache.h"
 #include "resolv_netid.h"
 #include "resolv_private.h"
@@ -111,6 +113,10 @@
 #ifdef ANDROID_CHANGES
 #include <sys/system_properties.h>
 #endif /* ANDROID_CHANGES */
+
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
 
 typedef union sockaddr_union {
     struct sockaddr     generic;
@@ -425,7 +431,9 @@ android_getaddrinfo_proxy(
 		return EAI_SYSTEM;
 	}
 
+#if !__CRYSTAX__
 	netid = __netdClientDispatch.netIdForResolv(netid);
+#endif /* !__CRYSTAX__ */
 
 	// Send the request.
 	if (fprintf(proxy, "getaddrinfo %s %s %d %d %d %d %u",
@@ -1879,6 +1887,8 @@ _dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
 	res_state res;
 	const struct android_net_context *netcontext;
 
+	(void)cb_data;
+
 	name = va_arg(ap, char *);
 	pai = va_arg(ap, const struct addrinfo *);
 	netcontext = va_arg(ap, const struct android_net_context *);
@@ -2099,6 +2109,8 @@ _files_getaddrinfo(void *rv, void *cb_data, va_list ap)
 	struct addrinfo sentinel, *cur;
 	struct addrinfo *p;
 	FILE *hostf = NULL;
+
+	(void)cb_data;
 
 	name = va_arg(ap, char *);
 	pai = va_arg(ap, struct addrinfo *);

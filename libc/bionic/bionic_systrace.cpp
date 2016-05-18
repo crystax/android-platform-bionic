@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
+#if !__CRYSTAX__
 #include <cutils/trace.h>
+#else
+#define ATRACE_TAG_BIONIC           (1<<16)
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>

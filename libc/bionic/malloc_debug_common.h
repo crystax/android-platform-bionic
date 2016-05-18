@@ -75,7 +75,9 @@ struct HashTable {
 /* Entry in malloc dispatch table. */
 typedef void* (*MallocDebugCalloc)(size_t, size_t);
 typedef void (*MallocDebugFree)(void*);
+#if defined(HAVE_MALLINFO)
 typedef struct mallinfo (*MallocDebugMallinfo)();
+#endif
 typedef void* (*MallocDebugMalloc)(size_t);
 typedef size_t (*MallocDebugMallocUsableSize)(const void*);
 typedef void* (*MallocDebugMemalign)(size_t, size_t);
@@ -91,7 +93,9 @@ typedef void* (*MallocDebugValloc)(size_t);
 struct MallocDebug {
   MallocDebugCalloc calloc;
   MallocDebugFree free;
+#if defined(HAVE_MALLINFO)
   MallocDebugMallinfo mallinfo;
+#endif
   MallocDebugMalloc malloc;
   MallocDebugMallocUsableSize malloc_usable_size;
   MallocDebugMemalign memalign;

@@ -44,7 +44,7 @@ int pthread_once(pthread_once_t* once_control, void (*init_routine)(void)) {
 
   // We prefer casting to atomic_int instead of declaring pthread_once_t to be atomic_int directly.
   // Because using the second method pollutes pthread.h, and causes an error when compiling libcxx.
-  atomic_int* once_control_ptr = reinterpret_cast<atomic_int*>(once_control);
+  atomic_int volatile * once_control_ptr = reinterpret_cast<atomic_int volatile *>(once_control);
 
   // First check if the once is already initialized. This will be the common
   // case and we want to make this as fast as possible. Note that this still

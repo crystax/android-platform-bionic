@@ -113,6 +113,7 @@ __RCSID("$NetBSD: res_init.c,v 1.8 2006/03/19 03:10:08 christos Exp $");
 #endif
 
 #include "res_private.h"
+#include "resolv_netid.h"
 
 /* Options.  Should all be left alone. */
 #ifndef DEBUG

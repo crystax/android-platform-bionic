@@ -19,6 +19,10 @@
 #include <sys/auxv.h>
 #include <unistd.h>
 
+#if __CRYSTAX__
+#define __libc_init_vdso __crystax___libc_init_vdso
+#endif
+
 #if defined(__aarch64__) || defined(__x86_64__) || defined (__i386__)
 
 #if defined(__aarch64__)

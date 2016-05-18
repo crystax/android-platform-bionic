@@ -31,6 +31,11 @@
 
 #include <sys/types.h>
 
+#if __CRYSTAX__
+#define pthread_t __crystax_bionic_pthread_t
+#define pthread_attr_t __crystax_bionic_pthread_attr_t
+#endif /* __CRYSTAX__ */
+
 typedef long pthread_t;
 
 typedef struct {
@@ -44,5 +49,24 @@ typedef struct {
   char __reserved[16];
 #endif
 } pthread_attr_t;
+
+#if __CRYSTAX__
+
+__CRYSTAX_STATIC_ASSERT(sizeof(__pthread_t) == sizeof(__crystax_bionic_pthread_t), "__pthread_t must be the same size as __crystax_bionic_pthread_t");
+__CRYSTAX_STATIC_ASSERT(sizeof(__pthread_attr_t) == sizeof(__crystax_bionic_pthread_attr_t), "__pthread_attr_t must be the same size as __crystax_bionic_pthread_attr_t");
+
+#undef pthread_t
+#ifndef _PTHREAD_T_DECLARED
+typedef __pthread_t pthread_t;
+#define _PTHREAD_T_DECLARED
+#endif
+
+#undef pthread_attr_t
+#ifndef _PTHREAD_ATTR_T_DECLARED
+typedef __pthread_attr_t pthread_attr_t;
+#define _PTHREAD_ATTR_T_DECLARED
+#endif
+
+#endif /* __CRYSTAX__ */
 
 #endif /* _MACHINE_PTHREAD_TYPES_H_ */

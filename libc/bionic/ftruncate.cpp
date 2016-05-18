@@ -18,7 +18,7 @@
 #include <sys/cdefs.h>
 #include <unistd.h>
 
-#if !defined(__LP64__)
+#if !defined(__LP64__) && !defined(__ILP32__)
 static_assert(sizeof(off_t) == 4,
               "libc can't be built with _FILE_OFFSET_BITS=64.");
 

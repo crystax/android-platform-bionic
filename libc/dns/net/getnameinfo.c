@@ -71,6 +71,10 @@ __RCSID("$NetBSD: getnameinfo.c,v 1.53 2012/09/26 23:13:00 christos Exp $");
 #include <stddef.h>
 #include <string.h>
 
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
+
 static const struct afd {
 	int		a_af;
 	socklen_t	a_addrlen;
@@ -397,6 +401,8 @@ ip6_sa2str(const struct sockaddr_in6 *sa6, char *buf, size_t bufsiz, int flags)
 	unsigned int ifindex;
 	const struct in6_addr *a6;
 	int n;
+
+	(void)flags;
 
 	assert(sa6 != NULL);
 	assert(buf != NULL);

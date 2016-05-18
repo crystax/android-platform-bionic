@@ -39,9 +39,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#if !__CRYSTAX__
 #include "private/bionic_tls.h"
-#endif
 
 static int __sysconf_monotonic_clock() {
   timespec t;

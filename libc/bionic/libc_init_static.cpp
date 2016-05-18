@@ -105,3 +105,8 @@ __noreturn void __libc_init(void* raw_args,
 
   exit(slingshot(args.argc, args.argv, args.envp));
 }
+
+__LIBC_HIDDEN__ void __libc_postfini()
+{
+    /* Nothing */
+}

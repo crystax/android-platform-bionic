@@ -28,6 +28,7 @@
 
 #include <sys/socket.h>
 
+extern "C"
 cmsghdr* __cmsg_nxthdr(msghdr* msg, cmsghdr* cmsg) {
   cmsghdr* ptr;
   ptr = reinterpret_cast<cmsghdr*>(reinterpret_cast<char*>(cmsg) + CMSG_ALIGN(cmsg->cmsg_len));

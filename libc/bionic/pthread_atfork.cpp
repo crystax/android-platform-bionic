@@ -178,4 +178,3 @@ extern "C" __LIBC_HIDDEN__ void __unregister_atfork(void* dso) {
   });
   pthread_mutex_unlock(&g_atfork_list_mutex);
 }
-

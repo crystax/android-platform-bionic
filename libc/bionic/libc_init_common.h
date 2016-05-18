@@ -30,6 +30,13 @@
 
 #include <sys/cdefs.h>
 
+#if __CRYSTAX__
+#define __libc_init_AT_SECURE __crystax__libc_init_AT_SECURE
+#define __libc_init_common __crystax___libc_init_common
+#define __libc_init_vdso __crystax___libc_init_vdso
+#define __libc_postfini __crystax___libc_postfini
+#endif /* __CRYSTAX__ */
+
 typedef struct {
   void (**preinit_array)(void);
   void (**init_array)(void);
@@ -40,6 +47,7 @@ __BEGIN_DECLS
 
 extern int main(int argc, char** argv, char** env);
 
+__LIBC_ABI_PUBLIC__
 __noreturn void __libc_init(void* raw_args,
                             void (*onexit)(void),
                             int (*slingshot)(int, char**, char**),

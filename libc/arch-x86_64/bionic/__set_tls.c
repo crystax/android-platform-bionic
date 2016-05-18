@@ -26,6 +26,8 @@
  * SUCH DAMAGE.
  */
 
+#if defined(__x86_64__)
+
 #include <sys/cdefs.h>
 #include <asm/prctl.h>
 #include <stdint.h>
@@ -35,3 +37,5 @@ extern int __arch_prctl(int, unsigned long);
 __LIBC_HIDDEN__ int __set_tls(void* ptr) {
   return __arch_prctl(ARCH_SET_FS, (uintptr_t) ptr);
 }
+
+#endif /* defined(__x86_64__) */

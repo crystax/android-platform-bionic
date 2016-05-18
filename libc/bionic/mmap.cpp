@@ -26,6 +26,8 @@
  * SUCH DAMAGE.
  */
 
+#if defined(__arm__) || defined(__i386__) || (defined(__mips__) && !defined(__LP64__))
+
 #include <errno.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -39,6 +41,7 @@ extern "C" void*  __mmap2(void*, size_t, int, int, int, size_t);
 
 static bool kernel_has_MADV_MERGEABLE = true;
 
+extern "C"
 void* mmap64(void* addr, size_t size, int prot, int flags, int fd, off64_t offset) {
   if (offset < 0 || (offset & ((1UL << MMAP2_SHIFT)-1)) != 0) {
     errno = EINVAL;
@@ -59,6 +62,9 @@ void* mmap64(void* addr, size_t size, int prot, int flags, int fd, off64_t offse
   return result;
 }
 
+extern "C"
 void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
   return mmap64(addr, size, prot, flags, fd, static_cast<off64_t>(offset));
 }
+
+#endif /* defined(__arm__) || defined(__i386__) || (defined(__mips__) && !defined(__LP64__)) */

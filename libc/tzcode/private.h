@@ -357,7 +357,7 @@ static time_t const time_t_max =
 #ifdef lint
 # define INITIALIZE(x)	((x) = 0)
 #else
-# define INITIALIZE(x)
+# define INITIALIZE(x) ((x) = 0)
 #endif
 
 /*

@@ -29,7 +29,11 @@
 #define _BIONIC_FUTEX_H
 
 #include <errno.h>
+#if __CRYSTAX__
+#include <kernel/uapi/linux/futex.h>
+#else
 #include <linux/futex.h>
+#endif
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/cdefs.h>

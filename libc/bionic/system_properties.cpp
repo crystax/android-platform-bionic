@@ -54,6 +54,10 @@
 #include "private/bionic_futex.h"
 #include "private/bionic_macros.h"
 
+#ifndef INT32_MAX
+#define INT32_MAX 0x7FFFFFFF
+#endif
+
 static const char property_service_socket[] = "/dev/socket/" PROP_SERVICE_NAME;
 
 

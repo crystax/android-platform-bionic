@@ -31,7 +31,7 @@
 extern "C" void __restore_rt(void);
 extern "C" void __restore(void);
 
-#if defined(__LP64__)
+#if defined(__LP64__) || (defined(__x86_64__) && defined(__ILP32__))
 
 extern "C" int __rt_sigaction(int, const struct __kernel_sigaction*, struct __kernel_sigaction*, size_t);
 

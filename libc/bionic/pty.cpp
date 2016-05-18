@@ -38,6 +38,8 @@
 
 #include "private/ThreadLocalBuffer.h"
 
+int login_tty(int fd);
+
 static ThreadLocalBuffer<char, 32> g_ptsname_tls_buffer;
 static ThreadLocalBuffer<char, 64> g_ttyname_tls_buffer;
 

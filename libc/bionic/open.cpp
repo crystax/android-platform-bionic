@@ -62,6 +62,7 @@ int open(const char* pathname, int flags, ...) {
 }
 __strong_alias(open64, open);
 
+extern "C"
 int __open_2(const char* pathname, int flags) {
   if (__predict_false((flags & O_CREAT) != 0)) {
     __fortify_chk_fail("open(O_CREAT): called without specifying a mode", 0);
@@ -84,6 +85,7 @@ int openat(int fd, const char *pathname, int flags, ...) {
 }
 __strong_alias(openat64, openat);
 
+extern "C"
 int __openat_2(int fd, const char* pathname, int flags) {
   if ((flags & O_CREAT) != 0) {
     __fortify_chk_fail("openat(O_CREAT): called without specifying a mode", 0);

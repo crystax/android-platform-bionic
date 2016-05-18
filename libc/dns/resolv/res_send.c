@@ -84,6 +84,10 @@ __RCSID("$NetBSD: res_send.c,v 1.9 2006/01/24 17:41:25 christos Exp $");
 /* set to 1 to use our small/simple/limited DNS cache */
 #define  USE_RESOLV_CACHE  1
 
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
+
 /*
  * Send query to name server and wait for reply.
  */
@@ -581,8 +585,8 @@ res_nsend(res_state statp,
 			if (n == 0)
 				goto next_ns;
 			if (DBG) {
-				__libc_format_log(ANDROID_LOG_DEBUG, "libc", "time=%ld\n",
-                                                  time(NULL));
+				__libc_format_log(ANDROID_LOG_DEBUG, "libc", "time=%" PRId64 "\n",
+                                                  (uint64_t)time(NULL));
 			}
 			if (v_circuit)
 				goto same_ns;

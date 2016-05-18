@@ -27,7 +27,11 @@
  */
 
 #include <private/bionic_asm.h>
+#if __CRYSTAX__
+#define SIGCHLD 17
+#else
 #include <asm/signal.h>
+#endif
 #include <linux/sched.h>
 
 ENTRY(vfork)

@@ -38,8 +38,6 @@
 #include <linux/in6.h>
 #include <linux/ipv6.h>
 
-#include <arpa/inet.h>
-
 __BEGIN_DECLS
 
 #define IPPORT_RESERVED  1024

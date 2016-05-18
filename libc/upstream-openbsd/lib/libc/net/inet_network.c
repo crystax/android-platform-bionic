@@ -77,7 +77,7 @@ again:
 	n = pp - parts;
 	for (val = 0, i = 0; i < 4; i++) {
 		val <<= 8;
-		if (i < n)
+		if ((unsigned)i < n)
 			val |= parts[i] & 0xff;
 	}
 	return (val);

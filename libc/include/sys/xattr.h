@@ -32,8 +32,13 @@
 
 __BEGIN_DECLS
 
+#ifndef XATTR_CREATE
 #define XATTR_CREATE 1
+#endif
+
+#ifndef XATTR_REPLACE
 #define XATTR_REPLACE 2
+#endif
 
 extern int fsetxattr(int fd, const char *name, const void *value, size_t size, int flags);
 extern int setxattr(const char *path, const char *name, const void *value, size_t size, int flags);

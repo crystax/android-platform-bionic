@@ -34,6 +34,10 @@
 #include "bionic_macros.h"
 #include "__get_tls.h"
 
+#if __CRYSTAX__
+#define __libc_init_main_thread __crystax___libc_init_main_thread
+#endif /* __CRYSTAX__ */
+
 __BEGIN_DECLS
 
 /** WARNING WARNING WARNING

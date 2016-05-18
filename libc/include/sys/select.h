@@ -33,8 +33,11 @@
 #include <signal.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <string.h> /* for memset */
 
 __BEGIN_DECLS
+
+typedef unsigned long fd_mask;
 
 #define FD_SETSIZE 1024
 #define NFDBITS (8 * sizeof(unsigned long))

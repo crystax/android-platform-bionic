@@ -40,6 +40,7 @@
 #include <sys/_system_properties.h>
 
 /* Set to 1 to enable debug traces */
+#undef  DEBUG
 #define DEBUG 0
 
 #if DEBUG

@@ -26,6 +26,11 @@
  * SUCH DAMAGE.
  */
 
+#if __CRYSTAX__
+#define __STDC_LIMIT_MACROS 1
+#include <stdint.h> // for UINTPTR_MAX
+#endif
+
 #include <errno.h>
 #include <unistd.h>
 

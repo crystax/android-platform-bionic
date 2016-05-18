@@ -29,6 +29,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+extern "C" int dup3(int, int, int);
+
 int dup2(int old_fd, int new_fd) {
   // If old_fd is equal to new_fd and a valid file descriptor, dup2 returns
   // old_fd without closing it. This is not true of dup3, so we have to

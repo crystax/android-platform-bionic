@@ -68,7 +68,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if __CRYSTAX__
+#include "resolv_private.h"
+#include "private/thread_private.h"
+#else
 #include "thread_private.h"
+#endif
 
 #define RU_OUT  	180	/* Time after wich will be reseeded */
 #define RU_MAX		30000	/* Uniq cycle, avoid blackjack prediction */

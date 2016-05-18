@@ -125,6 +125,7 @@ __RCSID("$NetBSD: res_debug.c,v 1.13 2012/06/25 22:32:45 abs Exp $");
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <assert.h>
 
 extern const char * const _res_opcodes[];
 extern const char * const _res_sectioncodes[];

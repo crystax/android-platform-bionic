@@ -23,6 +23,12 @@
 // Need to wrap memalign since je_memalign fails on non-power of 2 alignments.
 #define je_memalign je_memalign_round_up_boundary
 
+#if __CRYSTAX__
+#define je_memalign_round_up_boundary crystax_je_memalign_round_up_boundary
+#define je_mallinfo crystax_je_mallinfo
+#define je_pvalloc  crystax_je_pvalloc
+#endif
+
 __BEGIN_DECLS
 
 struct mallinfo je_mallinfo();

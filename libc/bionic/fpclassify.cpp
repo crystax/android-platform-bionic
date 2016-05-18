@@ -35,6 +35,8 @@
 extern "C" int __isinf(double);
 extern "C" int __isnan(double);
 
+__BEGIN_DECLS
+
 union float_u {
   float f;
   ieee_single bits;
@@ -168,3 +170,5 @@ __strong_alias(isinfl, __isinfl);
 __strong_alias(isnanl, __isnanl);
 __strong_alias(isfinitel, __isfinitel);
 __strong_alias(isnormall, __isnormall);
+
+__END_DECLS

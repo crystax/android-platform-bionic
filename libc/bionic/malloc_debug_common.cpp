@@ -56,6 +56,11 @@
 #error "Either one of USE_DLMALLOC or USE_JEMALLOC must be defined."
 #endif
 
+#if __CRYSTAX__
+#undef  Malloc
+#define Malloc(function) crystax_je_ ## function
+#endif
+
 // In a VM process, this is set to 1 after fork()ing out of zygote.
 int gMallocLeakZygoteChild = 0;
 
@@ -66,7 +71,9 @@ static HashTable g_hash_table;
 static const MallocDebug __libc_malloc_default_dispatch __attribute__((aligned(32))) = {
   Malloc(calloc),
   Malloc(free),
+#if defined(HAVE_MALLINFO)
   Malloc(mallinfo),
+#endif
   Malloc(malloc),
   Malloc(malloc_usable_size),
   Malloc(memalign),
@@ -251,9 +258,11 @@ extern "C" void free(void* mem) {
   __libc_malloc_dispatch->free(mem);
 }
 
+#if defined(HAVE_MALLINFO)
 extern "C" struct mallinfo mallinfo() {
   return __libc_malloc_dispatch->mallinfo();
 }
+#endif
 
 extern "C" void* malloc(size_t bytes) {
   return __libc_malloc_dispatch->malloc(bytes);
@@ -311,7 +320,9 @@ static void InitMalloc(void* malloc_impl_handler, MallocDebug* table, const char
 
   InitMallocFunction<MallocDebugCalloc>(malloc_impl_handler, &table->calloc, prefix, "calloc");
   InitMallocFunction<MallocDebugFree>(malloc_impl_handler, &table->free, prefix, "free");
+#if defined(HAVE_MALLINFO)
   InitMallocFunction<MallocDebugMallinfo>(malloc_impl_handler, &table->mallinfo, prefix, "mallinfo");
+#endif
   InitMallocFunction<MallocDebugMalloc>(malloc_impl_handler, &table->malloc, prefix, "malloc");
   InitMallocFunction<MallocDebugMallocUsableSize>(malloc_impl_handler, &table->malloc_usable_size, prefix, "malloc_usable_size");
   InitMallocFunction<MallocDebugMemalign>(malloc_impl_handler, &table->memalign, prefix, "memalign");
@@ -463,7 +474,9 @@ static void malloc_init_impl() {
   // Make sure dispatch table is initialized
   if ((malloc_dispatch_table.calloc == NULL) ||
       (malloc_dispatch_table.free == NULL) ||
+#if defined(HAVE_MALLINFO)
       (malloc_dispatch_table.mallinfo == NULL) ||
+#endif
       (malloc_dispatch_table.malloc == NULL) ||
       (malloc_dispatch_table.malloc_usable_size == NULL) ||
       (malloc_dispatch_table.memalign == NULL) ||

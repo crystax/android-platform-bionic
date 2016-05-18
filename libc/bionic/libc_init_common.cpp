@@ -53,6 +53,8 @@ extern "C" int __system_properties_init(void);
 extern "C" int __set_tls(void* ptr);
 extern "C" int __set_tid_address(int* tid_address);
 
+extern "C" void __crystax_on_load();
+
 __LIBC_HIDDEN__ void __libc_init_vdso();
 
 // Not public, but well-known in the BSDs.
@@ -122,6 +124,10 @@ void __libc_init_common(KernelArgumentBlock& args) {
   __system_properties_init(); // Requires 'environ'.
 
   __libc_init_vdso();
+
+#if __CRYSTAX__
+  __crystax_on_load();
+#endif
 }
 
 __noreturn static void __early_abort(int line) {

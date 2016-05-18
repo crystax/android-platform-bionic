@@ -91,7 +91,7 @@ static inline atomic_uint* SEM_TO_ATOMIC_POINTER(sem_t* sem) {
 
   // We prefer casting to atomic_uint instead of declaring sem->count to be atomic_uint directly.
   // Because using the second method pollutes semaphore.h.
-  return reinterpret_cast<atomic_uint*>(&sem->count);
+  return reinterpret_cast<atomic_uint*>(const_cast<unsigned*>(&sem->count));
 }
 
 // Return the shared bitflag from a semaphore counter.

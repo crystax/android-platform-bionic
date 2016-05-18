@@ -26,10 +26,11 @@
  * SUCH DAMAGE.
  */
 
+#if defined(__i386__)
+
 #include <limits.h>
 #include <pthread.h>
 #include <stdbool.h>
-
 #include <asm/ldt.h>
 
 extern int __set_thread_area(struct user_desc*);
@@ -72,3 +73,5 @@ __LIBC_HIDDEN__ int __set_tls(void* ptr) {
 
   return rc;
 }
+
+#endif /* __i386__ */

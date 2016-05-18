@@ -31,6 +31,7 @@
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/endian.h>
 #include <netinet/in.h>
 
 __BEGIN_DECLS

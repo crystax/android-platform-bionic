@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include "private/libc_logging.h"
 
+extern "C" size_t __strlen_chk(const char* s, size_t s_len);
+
 /*
  * Runtime implementation of __builtin____strncat_chk.
  *

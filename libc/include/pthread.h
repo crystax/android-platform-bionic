@@ -30,11 +30,16 @@
 #define _PTHREAD_H_
 
 #include <limits.h>
-#include <machine/pthread_types.h>
 #include <sched.h>
+#include <machine/pthread_types.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <time.h>
+
+#if __CRYSTAX__
+#include <crystax/ctassert.h>
+#define pthread_mutex_t __crystax_bionic_pthread_mutex_t
+#endif /* __CRYSTAX__ */
 
 typedef struct {
 #if defined(__LP64__)
@@ -44,22 +49,47 @@ typedef struct {
 #endif
 } pthread_mutex_t;
 
+#if __CRYSTAX__
+
+__CRYSTAX_STATIC_ASSERT(sizeof(__pthread_mutex_t) == sizeof(__crystax_bionic_pthread_mutex_t), "__pthread_mutex_t must be the same size as __crystax_bionic_pthread_mutex_t");
+
+#undef pthread_mutex_t
+#ifndef _PTHREAD_MUTEX_T_DECLARED
+typedef __pthread_mutex_t pthread_mutex_t;
+#define _PTHREAD_MUTEX_T_DECLARED
+#endif
+
+#endif /* __CRYSTAX__ */
+
 typedef long pthread_mutexattr_t;
 
 enum {
     PTHREAD_MUTEX_NORMAL = 0,
+#define PTHREAD_MUTEX_NORMAL PTHREAD_MUTEX_NORMAL
     PTHREAD_MUTEX_RECURSIVE = 1,
+#define PTHREAD_MUTEX_RECURSIVE PTHREAD_MUTEX_RECURSIVE
     PTHREAD_MUTEX_ERRORCHECK = 2,
+#define PTHREAD_MUTEX_ERRORCHECK PTHREAD_MUTEX_ERRORCHECK
 
     PTHREAD_MUTEX_ERRORCHECK_NP = PTHREAD_MUTEX_ERRORCHECK,
     PTHREAD_MUTEX_RECURSIVE_NP  = PTHREAD_MUTEX_RECURSIVE,
 
     PTHREAD_MUTEX_DEFAULT = PTHREAD_MUTEX_NORMAL
+#define PTHREAD_MUTEX_DEFAULT PTHREAD_MUTEX_DEFAULT
 };
 
 #define PTHREAD_MUTEX_INITIALIZER { { ((PTHREAD_MUTEX_NORMAL & 3) << 14) } }
 #define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP { { ((PTHREAD_MUTEX_RECURSIVE & 3) << 14) } }
 #define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP { { ((PTHREAD_MUTEX_ERRORCHECK & 3) << 14) } }
+
+#if __CRYSTAX__
+#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER  PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
+#define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP
+#endif /* __CRYSTAX__ */
+
+#if __CRYSTAX__
+#define pthread_cond_t __crystax_bionic_pthread_cond_t
+#endif /* __CRYSTAX__ */
 
 typedef struct {
 #if defined(__LP64__)
@@ -68,6 +98,14 @@ typedef struct {
   int32_t __private[1];
 #endif
 } pthread_cond_t;
+
+#if __CRYSTAX__
+#undef pthread_cond_t
+#ifndef _PTHREAD_COND_T_DECLARED
+typedef __pthread_cond_t pthread_cond_t;
+#define _PTHREAD_COND_T_DECLARED
+#endif
+#endif /* __CRYSTAX__ */
 
 typedef long pthread_condattr_t;
 
@@ -87,7 +125,7 @@ typedef long pthread_rwlockattr_t;
 
 enum {
   PTHREAD_RWLOCK_PREFER_READER_NP = 0,
-  PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP = 1,
+  PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP = 1
 };
 
 typedef int pthread_key_t;
@@ -166,6 +204,8 @@ int pthread_join(pthread_t, void**);
 
 int pthread_key_create(pthread_key_t*, void (*)(void*)) __nonnull((1));
 int pthread_key_delete(pthread_key_t);
+
+int pthread_kill(pthread_t tid, int sig);
 
 int pthread_mutexattr_destroy(pthread_mutexattr_t*) __nonnull((1));
 int pthread_mutexattr_getpshared(const pthread_mutexattr_t*, int*) __nonnull((1, 2));

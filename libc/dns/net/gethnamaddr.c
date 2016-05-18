@@ -60,7 +60,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <arpa/nameser.h>
+#if !__CRYSTAX__
 #include "NetdClientDispatch.h"
+#endif /* !__CRYSTAX__ */
 #include "resolv_netid.h"
 #include "resolv_private.h"
 #include "resolv_cache.h"
@@ -75,7 +77,22 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
+
+#ifndef NS_NULL_CB
+#define NS_NULL_CB { .src = NULL },
+#endif
+
+#ifdef ALIGNBYTES
+#undef ALIGNBYTES
+#endif
 #define ALIGNBYTES (sizeof(uintptr_t) - 1)
+
+#ifdef ALIGN
+#undef ALIGN
+#endif
 #define ALIGN(p) (((uintptr_t)(p) + ALIGNBYTES) &~ ALIGNBYTES)
 
 #ifndef LOG_AUTH
@@ -825,7 +842,9 @@ gethostbyname_internal(const char *name, int af, res_state res, struct hostent *
 		return gethostbyname_internal_real(name, af, res, hp, hbuf, hbuflen, errorp);
 	}
 
+#if !__CRYSTAX__
 	netid = __netdClientDispatch.netIdForResolv(netid);
+#endif /* !__CRYSTAX__ */
 
 	// This is writing to system/netd/server/DnsProxyListener.cpp and changes
 	// here need to be matched there.
@@ -938,7 +957,9 @@ android_gethostbyaddrfornet_proxy_internal(const void* addr, socklen_t len, int 
 		return NULL;
 	}
 
+#if !__CRYSTAX__
 	netid = __netdClientDispatch.netIdForResolv(netid);
+#endif /* !__CRYSTAX__ */
 
 	if (fprintf(proxy, "gethostbyaddr %s %d %d %u",
 			addrStr, len, af, netid) < 0) {
@@ -1174,6 +1195,8 @@ _dns_gethtbyname(void *rv, void *cb_data, va_list ap)
 	res_state res;
 	struct getnamaddr *info = rv;
 
+	(void)cb_data;
+
 	_DIAGASSERT(rv != NULL);
 
 	name = va_arg(ap, char *);
@@ -1240,6 +1263,8 @@ _dns_gethtbyaddr(void *rv, void	*cb_data, va_list ap)
 	size_t blen;
 	struct getnamaddr *info = rv;
 	unsigned netid, mark;
+
+	(void)cb_data;
 
 	_DIAGASSERT(rv != NULL);
 
@@ -1477,6 +1502,8 @@ _yp_gethtbyaddr(void *rv, void *cb_data, va_list ap)
 	const char *map;
 	struct getnamaddr *info = rv;
 
+	(void)cb_data;
+
 	_DIAGASSERT(rv != NULL);
 
 	uaddr = va_arg(ap, unsigned char *);
@@ -1527,6 +1554,8 @@ _yp_gethtbyname(void *rv, void *cb_data, va_list ap)
 	int af;
 	const char *map;
 	struct getnamaddr *info = rv;
+
+	(void)cb_data;
 
 	_DIAGASSERT(rv != NULL);
 
