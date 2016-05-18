@@ -53,7 +53,10 @@ extern "C" int __system_properties_init(void);
 extern "C" int __set_tls(void* ptr);
 extern "C" int __set_tid_address(int* tid_address);
 
+#if __CRYSTAX__
+extern "C" void __crystax_jemalloc_constructor();
 extern "C" void __crystax_on_load();
+#endif /* __CRYSTAX__ */
 
 __LIBC_HIDDEN__ void __libc_init_vdso();
 
@@ -126,6 +129,7 @@ void __libc_init_common(KernelArgumentBlock& args) {
   __libc_init_vdso();
 
 #if __CRYSTAX__
+  __crystax_jemalloc_constructor();
   __crystax_on_load();
 #endif
 }
