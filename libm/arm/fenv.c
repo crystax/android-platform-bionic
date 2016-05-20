@@ -26,6 +26,8 @@
  * $FreeBSD: src/lib/msun/arm/fenv.c,v 1.1 2004/06/06 10:03:59 das Exp $
  */
 
+#if !__SOFTFP__
+
 #include <fenv.h>
 
 #define FPSCR_ENABLE_SHIFT 8
@@ -137,3 +139,5 @@ int fegetexcept(void) {
   fegetenv(&__fpscr);
   return ((__fpscr & FPSCR_ENABLE_MASK) >> FPSCR_ENABLE_SHIFT);
 }
+
+#endif /* !__SOFTFP__ */
