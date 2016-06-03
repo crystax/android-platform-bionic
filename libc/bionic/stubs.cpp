@@ -60,8 +60,9 @@ struct group_state_t {
 struct passwd_state_t {
   passwd passwd_;
   char name_buffer_[32];
-  char dir_buffer_[32];
-  char sh_buffer_[32];
+  char dir_buffer_[PATH_MAX];
+  char sh_buffer_[PATH_MAX];
+  char passwd_buffer_[64];
 };
 
 static ThreadLocalBuffer<group_state_t> g_group_tls_buffer;
@@ -108,22 +109,34 @@ static int do_getpw_r(int by_name, const char* name, uid_t uid,
   required_byte_count += strlen(src->pw_dir) + 1;
   dst->pw_shell = buf + required_byte_count;
   required_byte_count += strlen(src->pw_shell) + 1;
+#if __CRYSTAX__
+  dst->pw_passwd = buf + required_byte_count;
+  required_byte_count += strlen(src->pw_passwd) + 1;
+  dst->pw_gecos = buf + required_byte_count;
+  required_byte_count += strlen(src->pw_gecos) + 1;
+#endif
   if (byte_count < required_byte_count) {
     return ERANGE;
   }
 
   // Copy the strings.
-  snprintf(buf, byte_count, "%s%c%s%c%s", src->pw_name, 0, src->pw_dir, 0, src->pw_shell);
+  snprintf(buf, byte_count, "%s%c%s%c%s"
+#if __CRYSTAX__
+          "%c%s%c%s"
+#endif
+          , src->pw_name, 0, src->pw_dir, 0, src->pw_shell
+#if __CRYSTAX__
+          , 0, src->pw_passwd, 0, src->pw_gecos
+#endif
+          );
 
+#if !__CRYSTAX__
   // pw_passwd and pw_gecos are non-POSIX and unused (always NULL) in bionic.
   dst->pw_passwd = NULL;
-#if defined(__CRYSTAX__)
-  dst->pw_gecos = src->pw_name;
-#else
 #if defined(__LP64__)
   dst->pw_gecos = NULL;
 #endif
-#endif
+#endif /* !__CRYSTAX__ */
 
   // Copy the integral fields.
   dst->pw_gid = src->pw_gid;
@@ -148,6 +161,9 @@ static passwd* android_iinfo_to_passwd(passwd_state_t* state,
   snprintf(state->name_buffer_, sizeof(state->name_buffer_), "%s", iinfo->name);
   snprintf(state->dir_buffer_, sizeof(state->dir_buffer_), "/");
   snprintf(state->sh_buffer_, sizeof(state->sh_buffer_), "/system/bin/sh");
+#if __CRYSTAX__
+  snprintf(state->passwd_buffer_, sizeof(state->passwd_buffer_), "%s", "");
+#endif
 
   passwd* pw = &state->passwd_;
   pw->pw_name  = state->name_buffer_;
@@ -156,6 +172,7 @@ static passwd* android_iinfo_to_passwd(passwd_state_t* state,
   pw->pw_dir   = state->dir_buffer_;
   pw->pw_shell = state->sh_buffer_;
 #if defined(__CRYSTAX__)
+  pw->pw_passwd = state->passwd_buffer_;
   pw->pw_gecos = pw->pw_name;
 #endif
   return pw;
@@ -341,6 +358,9 @@ static passwd* app_id_to_passwd(uid_t uid, passwd_state_t* state) {
   }
 
   snprintf(state->sh_buffer_, sizeof(state->sh_buffer_), "/system/bin/sh");
+#if __CRYSTAX__
+  snprintf(state->passwd_buffer_, sizeof(state->passwd_buffer_), "%s", "");
+#endif
 
   passwd* pw = &state->passwd_;
   pw->pw_name  = state->name_buffer_;
@@ -349,6 +369,7 @@ static passwd* app_id_to_passwd(uid_t uid, passwd_state_t* state) {
   pw->pw_uid   = uid;
   pw->pw_gid   = uid;
 #if defined(__CRYSTAX__)
+  pw->pw_passwd = state->passwd_buffer_;
   pw->pw_gecos = pw->pw_name;
 #endif
   return pw;
