@@ -31,6 +31,7 @@
 
 #include <signal.h>
 #include <sys/user.h>
+#include <stdint.h>
 
 __BEGIN_DECLS
 
