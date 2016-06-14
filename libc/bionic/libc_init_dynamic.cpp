@@ -48,6 +48,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <elf.h>
+#if __CRYSTAX__
+#include <dlfcn.h>
+#endif
 #include "libc_init_common.h"
 
 #include "private/bionic_tls.h"
@@ -74,6 +77,9 @@ extern "C" void *__crystax_construct_rawargs();
 // as soon as the shared library is loaded.
 __attribute__((constructor)) static void __libc_preinit() {
 #if __CRYSTAX__
+  // This is needed to ensure that Google's libc.so loaded and initialized _before_ libcrystax
+  dlopen("libc.so", RTLD_NOW|RTLD_LOCAL);
+
   KernelArgumentBlock args(__crystax_construct_rawargs());
 
   __libc_init_main_thread(args);
