@@ -31,38 +31,38 @@
 #include <linux/in6.h>
 
 #define IN6_IS_ADDR_UNSPECIFIED(a)	\
-	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) == 0))
+	((*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[8]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[12]) == 0))
 
 #define IN6_IS_ADDR_LOOPBACK(a)		\
-	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) == ntohl(1)))
+	((*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[8]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[12]) == ntohl(1)))
 
 #define IN6_IS_ADDR_V4COMPAT(a)		\
-	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) != 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) != ntohl(1)))
+	((*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[8]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[12]) != 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[12]) != ntohl(1)))
 
 #define IN6_IS_ADDR_V4MAPPED(a)		      \
-	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
-	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == ntohl(0x0000ffff)))
+	((*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&((struct in6_addr *)(a))->s6_addr[8]) == ntohl(0x0000ffff)))
 
 #define IN6_IS_ADDR_LINKLOCAL(a)	\
-	(((a)->s6_addr[0] == 0xfe) && (((a)->s6_addr[1] & 0xc0) == 0x80))
+	((((struct in6_addr *)(a))->s6_addr[0] == 0xfe) && ((((struct in6_addr *)(a))->s6_addr[1] & 0xc0) == 0x80))
 
 #define IN6_IS_ADDR_SITELOCAL(a)	\
-	(((a)->s6_addr[0] == 0xfe) && (((a)->s6_addr[1] & 0xc0) == 0xc0))
+	((((struct in6_addr *)(a))->s6_addr[0] == 0xfe) && ((((struct in6_addr *)(a))->s6_addr[1] & 0xc0) == 0xc0))
 
 /* RFC 4193. */
 #define IN6_IS_ADDR_ULA(a)	\
-	(((a)->s6_addr[0] & 0xfe) == 0xfc)
+	((((struct in6_addr *)(a))->s6_addr[0] & 0xfe) == 0xfc)
 
 #define IN6_IS_ADDR_MULTICAST(a)	\
 	(((__const uint8_t *) (a))[0] == 0xff)
@@ -76,7 +76,7 @@
 #define IPV6_ADDR_SCOPE_GLOBAL          0x0e
 
 #define IPV6_ADDR_MC_SCOPE(a)	\
-	((a)->s6_addr[1] & 0x0f)
+	(((struct in6_addr *)(a))->s6_addr[1] & 0x0f)
 
 #define IN6_IS_ADDR_MC_NODELOCAL(a)     \
 	(IN6_IS_ADDR_MULTICAST(a) &&  \
@@ -95,7 +95,7 @@
 	 (IPV6_ADDR_MC_SCOPE(a) == IPV6_ADDR_SCOPE_GLOBAL))
 
 #define IN6_ARE_ADDR_EQUAL(a, b)			\
-    (memcmp(&(a)->s6_addr[0], &(b)->s6_addr[0], sizeof(struct in6_addr)) == 0)
+    (memcmp(&((struct in6_addr *)(a))->s6_addr[0], &((struct in6_addr *)(b))->s6_addr[0], sizeof(struct in6_addr)) == 0)
 
 #define INET6_ADDRSTRLEN 46
 
