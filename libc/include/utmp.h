@@ -36,6 +36,13 @@
 #define _PATH_WTMP      "/var/log/wtmp"
 #define _PATH_LASTLOG   "/var/log/lastlog"
 
+#if __CRYSTAX__
+#define UTMP_FILE _PATH_UTMP
+#define WTMP_FILE _PATH_WTMP
+#define UTMP_FILENAME _PATH_UTMP
+#define WTMP_FILENAME _PATH_WTMP
+#endif /* __CRYSTAX__ */
+
 #ifdef __LP64__
 #define UT_NAMESIZE 32
 #define UT_LINESIZE 32
