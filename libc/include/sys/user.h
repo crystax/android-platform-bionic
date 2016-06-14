@@ -237,7 +237,7 @@ struct user {
 
 #elif defined(__aarch64__)
 
-// There are no user structures for 64 bit arm.
+/* There are no user structures for 64 bit arm. */
 
 #else
 
