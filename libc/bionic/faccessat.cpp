@@ -29,6 +29,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#if __CRYSTAX__
+#include <crystax/log.h>
+#endif
 
 extern "C" int ___faccessat(int, const char*, int);
 
@@ -43,6 +46,14 @@ int faccessat(int dirfd, const char* pathname, int mode, int flags) {
   }
 
   if (flags != 0) {
+#if __CRYSTAX__
+    if (flags == AT_EACCESS) {
+      if (getuid() == geteuid() && getgid() == getegid()) {
+        return ___faccessat(dirfd, pathname, mode);
+      }
+      CRYSTAX_PANIC("suid binaries are not supported");
+    }
+#endif
     // We deliberately don't support AT_SYMLINK_NOFOLLOW, a glibc
     // only feature which is error prone and dangerous.
     //
