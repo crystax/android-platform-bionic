@@ -101,9 +101,7 @@ __attribute__((constructor)) static void __libc_preinit() {
 
   // Hooks for various libraries to let them know that we're starting up.
   malloc_debug_init();
-#if !__CRYSTAX__
   netdClientInit();
-#endif /* !__CRYSTAX__ */
 }
 
 __LIBC_HIDDEN__ void __libc_postfini() {

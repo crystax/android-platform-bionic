@@ -34,6 +34,7 @@ static void netdClientInitFunction(void* handle, const char* symbol, FunctionTyp
 }
 
 static void netdClientInitImpl() {
+#if !__CRYSTAX__
     void* netdClientHandle = dlopen("libnetd_client.so", RTLD_NOW);
     if (netdClientHandle == NULL) {
         // If the library is not available, it's not an error. We'll just use
@@ -47,6 +48,7 @@ static void netdClientInitImpl() {
     netdClientInitFunction(netdClientHandle, "netdClientInitNetIdForResolv",
                            &__netdClientDispatch.netIdForResolv);
     netdClientInitFunction(netdClientHandle, "netdClientInitSocket", &__netdClientDispatch.socket);
+#endif /* !__CRYSTAX__ */
 }
 
 static pthread_once_t netdClientInitOnce = PTHREAD_ONCE_INIT;

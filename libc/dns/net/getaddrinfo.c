@@ -92,9 +92,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <netdb.h>
-#if !__CRYSTAX__
 #include "NetdClientDispatch.h"
-#endif /* !__CRYSTAX__ */
 #include "resolv_cache.h"
 #include "resolv_netid.h"
 #include "resolv_private.h"
@@ -431,9 +429,7 @@ android_getaddrinfo_proxy(
 		return EAI_SYSTEM;
 	}
 
-#if !__CRYSTAX__
 	netid = __netdClientDispatch.netIdForResolv(netid);
-#endif /* !__CRYSTAX__ */
 
 	// Send the request.
 	if (fprintf(proxy, "getaddrinfo %s %s %d %d %d %d %u",

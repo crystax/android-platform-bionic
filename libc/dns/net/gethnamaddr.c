@@ -60,9 +60,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <arpa/nameser.h>
-#if !__CRYSTAX__
 #include "NetdClientDispatch.h"
-#endif /* !__CRYSTAX__ */
 #include "resolv_netid.h"
 #include "resolv_private.h"
 #include "resolv_cache.h"
@@ -842,9 +840,7 @@ gethostbyname_internal(const char *name, int af, res_state res, struct hostent *
 		return gethostbyname_internal_real(name, af, res, hp, hbuf, hbuflen, errorp);
 	}
 
-#if !__CRYSTAX__
 	netid = __netdClientDispatch.netIdForResolv(netid);
-#endif /* !__CRYSTAX__ */
 
 	// This is writing to system/netd/server/DnsProxyListener.cpp and changes
 	// here need to be matched there.
@@ -957,9 +953,7 @@ android_gethostbyaddrfornet_proxy_internal(const void* addr, socklen_t len, int 
 		return NULL;
 	}
 
-#if !__CRYSTAX__
 	netid = __netdClientDispatch.netIdForResolv(netid);
-#endif /* !__CRYSTAX__ */
 
 	if (fprintf(proxy, "gethostbyaddr %s %d %d %u",
 			addrStr, len, af, netid) < 0) {
