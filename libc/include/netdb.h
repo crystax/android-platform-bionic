@@ -65,6 +65,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <inttypes.h>
+
 #ifndef _PATH_HEQUIV
 # define	_PATH_HEQUIV	"/system/etc/hosts.equiv"
 #endif
@@ -241,7 +243,7 @@ int getaddrinfo(const char *, const char *, const struct addrinfo *, struct addr
 int getnameinfo(const struct sockaddr *, socklen_t, char *, size_t, char *, size_t, int);
 void freeaddrinfo(struct addrinfo *);
 const char	*gai_strerror(int);
-void setnetgrent(const char *);
+int setnetgrent(const char *);
 void setservent(int);
 
 #pragma GCC visibility pop
