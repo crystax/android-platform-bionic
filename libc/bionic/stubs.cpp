@@ -158,9 +158,24 @@ int getpwuid_r(uid_t uid, passwd* pwd,
 
 static passwd* android_iinfo_to_passwd(passwd_state_t* state,
                                        const android_id_info* iinfo) {
+  const char *homedir = NULL;
+  const char *shell = NULL;
+
+#if __CRYSTAX__
+  if (iinfo->aid == getuid()) {
+    homedir = getenv("HOME");
+    shell = getenv("SHELL");
+  }
+
+  if (homedir == NULL)
+    homedir = "/";
+  if (shell == NULL)
+    shell = "/system/bin/sh";
+#endif
+
   snprintf(state->name_buffer_, sizeof(state->name_buffer_), "%s", iinfo->name);
-  snprintf(state->dir_buffer_, sizeof(state->dir_buffer_), "/");
-  snprintf(state->sh_buffer_, sizeof(state->sh_buffer_), "/system/bin/sh");
+  snprintf(state->dir_buffer_, sizeof(state->dir_buffer_), homedir);
+  snprintf(state->sh_buffer_, sizeof(state->sh_buffer_), shell);
 #if __CRYSTAX__
   snprintf(state->passwd_buffer_, sizeof(state->passwd_buffer_), "%s", "");
 #endif
@@ -350,14 +365,24 @@ static passwd* app_id_to_passwd(uid_t uid, passwd_state_t* state) {
 
   print_app_name_from_uid(uid, state->name_buffer_, sizeof(state->name_buffer_));
 
-  const uid_t appid = uid % AID_USER;
-  if (appid < AID_APP) {
-      snprintf(state->dir_buffer_, sizeof(state->dir_buffer_), "/");
-  } else {
-      snprintf(state->dir_buffer_, sizeof(state->dir_buffer_), "/data");
-  }
+  const char *homedir = NULL;
+  const char *shell = NULL;
 
-  snprintf(state->sh_buffer_, sizeof(state->sh_buffer_), "/system/bin/sh");
+#if __CRYSTAX__
+  if (uid == getuid()) {
+    homedir = getenv("HOME");
+    shell = getenv("SHELL");
+  }
+#endif
+
+  const uid_t appid = uid % AID_USER;
+  if (homedir == NULL)
+    homedir = appid < AID_APP ? "/" : "/data";
+  if (shell == NULL)
+    shell = "/system/bin/sh";
+
+  snprintf(state->dir_buffer_, sizeof(state->dir_buffer_), homedir);
+  snprintf(state->sh_buffer_, sizeof(state->sh_buffer_), shell);
 #if __CRYSTAX__
   snprintf(state->passwd_buffer_, sizeof(state->passwd_buffer_), "%s", "");
 #endif
