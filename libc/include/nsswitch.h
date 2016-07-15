@@ -132,6 +132,16 @@ typedef struct {
 #endif
 #define	NS_NULL_CB		{ .src = NULL },
 
+/*.
+ * Many NSS interfaces follow the getXXnam, getXXid, getXXent pattern.
+ * Developers are encouraged to use nss_lookup_type where approriate.
+ */
+enum nss_lookup_type {
+	nss_lt_name = 1,
+	nss_lt_id   = 2,
+	nss_lt_all  = 3
+};
+
 /*
  * ns_src - `nsswitch source'
  * Used by the nsparser routines to store a mapping between a source
