@@ -65,7 +65,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#include <inttypes.h>
+#include <sys/param.h> /* for MAXHOSTNAMELEN */
+#include <inttypes.h>  /* for PRxx64 */
 
 #ifndef _PATH_HEQUIV
 # define	_PATH_HEQUIV	"/system/etc/hosts.equiv"
