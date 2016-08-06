@@ -48,9 +48,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <elf.h>
-#if __CRYSTAX__
-#include <dlfcn.h>
-#endif
 #include "libc_init_common.h"
 
 #include "private/bionic_tls.h"
@@ -65,7 +62,10 @@ extern "C" {
 
 #if __CRYSTAX__
 
-extern "C" void *__crystax_construct_rawargs();
+extern "C" {
+  void *__crystax_construct_rawargs();
+  void *__crystax_bionic_handle();
+}
 
 #define __libc_preinit __crystax___libc_preinit
 
@@ -78,14 +78,13 @@ extern "C" void *__crystax_construct_rawargs();
 __attribute__((constructor)) static void __libc_preinit() {
 #if __CRYSTAX__
   // This is needed to ensure that Google's libc.so loaded and initialized _before_ libcrystax
-  dlopen("libc.so", RTLD_NOW|RTLD_LOCAL);
+  __crystax_bionic_handle();
 
   KernelArgumentBlock args(__crystax_construct_rawargs());
 
   __libc_init_main_thread(args);
   __libc_init_AT_SECURE(args);
   __libc_init_common(args);
-
 #else /* !__CRYSTAX__ */
   // Read the kernel argument block pointer from TLS.
   void** tls = __get_tls();

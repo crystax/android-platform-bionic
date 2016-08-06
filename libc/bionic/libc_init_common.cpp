@@ -54,8 +54,10 @@ extern "C" int __set_tls(void* ptr);
 extern "C" int __set_tid_address(int* tid_address);
 
 #if __CRYSTAX__
-extern "C" void __crystax_jemalloc_constructor();
-extern "C" void __crystax_on_load();
+extern "C" {
+  void __crystax_redirect_stdio_to_logcat();
+  void __crystax_on_load();
+}
 #endif /* __CRYSTAX__ */
 
 __LIBC_HIDDEN__ void __libc_init_vdso();
@@ -69,6 +71,63 @@ char** environ;
 // Declared in "private/bionic_ssp.h".
 uintptr_t __stack_chk_guard = 0;
 
+#if __CRYSTAX__
+bool __crystax_loaded_after_main()
+{
+    static int flag = -1;
+    if (flag < 0) {
+        void **tls = __get_tls();
+        pthread_internal_t *pmth = (pthread_internal_t *)(tls ? tls[TLS_SLOT_THREAD_ID] : NULL);
+        flag = (pmth && (pmth->prev || pmth->next)) ? 1 : 0;
+    }
+    return flag;
+}
+
+bool __crystax_loaded_before_main()
+{
+    return !__crystax_loaded_after_main();
+}
+#endif /* __CRYSTAX__ */
+
+#if 0
+void __crystax_dump_tls(int dumpid)
+{
+    void **tls = __get_tls();
+    DBG("[%d] tls=%p", dumpid, tls);
+
+    pthread_internal_t *pthread = (pthread_internal_t *)tls[TLS_SLOT_THREAD_ID];
+    DBG("[%d] pthread=%p", dumpid, pthread);
+    pthread_internal_t &main_thread = *pthread;
+    DBG("[%d] main_thread={.tid=%d,prev=%p,next=%p}", dumpid,
+            (int)main_thread.tid, main_thread.prev, main_thread.next);
+
+    pid_t cached_pid;
+    DBG("[%d] get_cached_pid=%s, cached_pid=%d", dumpid, main_thread.get_cached_pid(&cached_pid) ? "true" : "false", (int)cached_pid);
+
+    DBG("[%d] main_thread.alternate_signal_stack=%p", dumpid, main_thread.alternate_signal_stack);
+
+#define DUMP_TLS_SLOT(x) DBG("[%d] main_thread.tls[" #x "]=%p", dumpid, main_thread.tls[x])
+    DUMP_TLS_SLOT(TLS_SLOT_SELF);
+    DUMP_TLS_SLOT(TLS_SLOT_THREAD_ID);
+    DUMP_TLS_SLOT(TLS_SLOT_ERRNO);
+    DUMP_TLS_SLOT(TLS_SLOT_OPENGL_API);
+    DUMP_TLS_SLOT(TLS_SLOT_OPENGL);
+    DUMP_TLS_SLOT(TLS_SLOT_BIONIC_PREINIT);
+    DUMP_TLS_SLOT(TLS_SLOT_STACK_GUARD);
+    DUMP_TLS_SLOT(TLS_SLOT_DLERROR);
+    DUMP_TLS_SLOT(TLS_SLOT_ART_THREAD_SELF);
+    DUMP_TLS_SLOT(TLS_SLOT_TSAN);
+    DUMP_TLS_SLOT(BIONIC_TLS_SLOTS);
+#undef  DUMP_TLS_SLOT
+
+#if 0
+    for (size_t i = 0; i < sizeof(main_thread.key_data)/sizeof(main_thread.key_data[0]); ++i)
+        DBG("[%d] main_thread.key_data[%zu]={.seq=%llu,.data=%p}", dumpid, i,
+                (unsigned long long)(main_thread.key_data[i].seq), main_thread.key_data[i].data);
+#endif
+}
+#endif
+
 // Setup for the main thread. For dynamic executables, this is called by the
 // linker _before_ libc is mapped in memory. This means that all writes to
 // globals from this function will apply to linker-private copies and will not
@@ -78,6 +137,14 @@ uintptr_t __stack_chk_guard = 0;
 // stores the pointer in TLS, but does not add it to pthread's thread list. This
 // has to be done later from libc itself (see __libc_init_common).
 void __libc_init_main_thread(KernelArgumentBlock& args) {
+#if __CRYSTAX__
+  // Don't reinitialize main thread if we're loaded after main() started.
+  // This is usually the case when we're running inside Zygote process,
+  // being loaded with explicit call of System.loadLibrary() from Java code.
+  if (__crystax_loaded_after_main())
+      return;
+#endif /* __CRYSTAX__ */
+
   __libc_auxv = args.auxv;
 
   static pthread_internal_t main_thread;
@@ -102,9 +169,11 @@ void __libc_init_main_thread(KernelArgumentBlock& args) {
   __init_tls(&main_thread);
   __set_tls(main_thread.tls);
 
+#if !__CRYSTAX__
   // Store a pointer to the kernel argument block in a TLS slot to be
   // picked up by the libc constructor.
   main_thread.tls[TLS_SLOT_BIONIC_PREINIT] = &args;
+#endif /* !__CRYSTAX__ */
 
   __init_alternate_signal_stack(&main_thread);
 }
@@ -120,16 +189,23 @@ void __libc_init_common(KernelArgumentBlock& args) {
   // AT_RANDOM is a pointer to 16 bytes of randomness on the stack.
   __stack_chk_guard = *reinterpret_cast<uintptr_t*>(getauxval(AT_RANDOM));
 
+#if __CRYSTAX__
+  if (__crystax_loaded_before_main()) {
+#endif
   // Get the main thread from TLS and add it to the thread list.
   pthread_internal_t* main_thread = __get_thread();
   __pthread_internal_add(main_thread);
+#if __CRYSTAX__
+  }
+#endif
 
   __system_properties_init(); // Requires 'environ'.
 
   __libc_init_vdso();
 
 #if __CRYSTAX__
-  __crystax_jemalloc_constructor();
+  if (__crystax_loaded_after_main())
+      __crystax_redirect_stdio_to_logcat();
   __crystax_on_load();
 #endif
 }

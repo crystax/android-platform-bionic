@@ -46,6 +46,10 @@
 
 #include "private/ScopedPthreadMutexLocker.h"
 
+#if __CRYSTAX__
+#include <crystax/malloc.h>
+#define Malloc(function) crystax_ ## function
+#else /* !__CRYSTAX__ */
 #if defined(USE_JEMALLOC)
 #include "jemalloc.h"
 #define Malloc(function)  je_ ## function
@@ -55,11 +59,7 @@
 #else
 #error "Either one of USE_DLMALLOC or USE_JEMALLOC must be defined."
 #endif
-
-#if __CRYSTAX__
-#undef  Malloc
-#define Malloc(function) crystax_je_ ## function
-#endif
+#endif /* !__CRYSTAX__ */
 
 // In a VM process, this is set to 1 after fork()ing out of zygote.
 int gMallocLeakZygoteChild = 0;
