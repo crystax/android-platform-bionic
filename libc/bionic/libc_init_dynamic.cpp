@@ -67,8 +67,6 @@ extern "C" {
   void *__crystax_bionic_handle();
 }
 
-#define __libc_preinit __crystax___libc_preinit
-
 #endif /* __CRYSTAX__ */
 
 // We flag the __libc_preinit function as a constructor to ensure
