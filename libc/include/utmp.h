@@ -97,6 +97,7 @@ __BEGIN_DECLS
 int utmpname(const char*);
 void setutent();
 struct utmp* getutent();
+void endutent();
 
 int login_tty(int);
 
