@@ -142,7 +142,7 @@ extern void       __sched_cpufree(cpu_set_t* set);
 
 #define CPU_COUNT_S(setsize, set)  __sched_cpucount((setsize), (set))
 
-extern int __sched_cpucount(size_t setsize, cpu_set_t* set);
+extern int __sched_cpucount(size_t setsize, const cpu_set_t* set);
 
 #endif /* __USE_GNU */
 
